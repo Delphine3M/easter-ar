@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Easter AR Magic</title>
+
+  <!-- A-Frame 1.4.2 — MIT licence, open-source -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #ar-camera {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    a-scene { position: fixed; inset: 0; z-index: 1; }
+    .a-canvas { background: transparent !important; }
+
+    /* Loading */
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 900;
+      background: linear-gradient(160deg, #fce4ec 0%, #e8f5e9 50%, #e3f2fd 100%);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; transition: opacity 0.9s ease;
+    }
+    #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+    .load-eggs { display: flex; gap: 12px; align-items: flex-end; }
+    .load-egg { border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; animation: eggBounce 1.2s ease-in-out infinite; }
+    .load-egg:nth-child(1) { width:28px; height:36px; background:#ffb3c6; animation-delay:0s;    }
+    .load-egg:nth-child(2) { width:36px; height:46px; background:#c8a2c8; animation-delay:0.18s; }
+    .load-egg:nth-child(3) { width:28px; height:36px; background:#98e8a0; animation-delay:0.36s; }
+    @keyframes eggBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+    .load-text { font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 600; color: #6d28d9; }
+
+    /* Back button */
+    #back-btn {
+      position: fixed; top: env(safe-area-inset-top, 16px); left: 16px;
+      z-index: 200; background: rgba(255,255,255,0.88); border: none;
+      border-radius: 50px; padding: 10px 18px;
+      font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 700;
+      color: #6d28d9; cursor: pointer;
+      backdrop-filter: blur(12px); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+      transition: transform 0.12s;
+    }
+    #back-btn:active { transform: scale(0.95); }
+
+    /* Selfie badge */
+    #selfie-badge {
+      position: fixed; top: env(safe-area-inset-top, 16px); right: 16px;
+      z-index: 200; background: rgba(109,40,217,0.85); color: #fff;
+      border-radius: 50px; padding: 8px 14px;
+      font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 700;
+      backdrop-filter: blur(12px); display: none;
+    }
+    #selfie-badge.visible { display: block; }
+
+    /* Bottom UI bar */
+    #ui-bar {
+      position: fixed; bottom: env(safe-area-inset-bottom, 28px);
+      left: 0; right: 0; display: flex; justify-content: center;
+      align-items: center; gap: 12px; z-index: 200; padding: 0 20px;
+      pointer-events: none;
+    }
+    .ui-btn {
+      pointer-events: all; background: rgba(255,255,255,0.9); border: none;
+      border-radius: 50px; padding: 14px 22px;
+      font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 700;
+      color: #3d1f6e; cursor: pointer;
+      backdrop-filter: blur(14px); box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .ui-btn:active { transform: scale(0.95); box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+    #photo-btn         { font-size: 18px; padding: 16px 28px; }
+    #flip-btn          { font-size: 20px; padding: 14px 18px; }
+    #picker-toggle-btn { font-size: 20px; padding: 14px 18px; }
+
+    /* Flash */
+    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; z-index: 500; pointer-events: none; }
+    #flash.go { animation: flashAnim 0.55s ease-out forwards; }
+    @keyframes flashAnim { 0%{opacity:0.95} 100%{opacity:0} }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: calc(env(safe-area-inset-bottom, 28px) + 88px);
+      left: 50%; transform: translateX(-50%);
+      background: rgba(30,20,60,0.82); color: #fff;
+      padding: 11px 22px; border-radius: 24px;
+      font-size: 14px; font-weight: 600; font-family: -apple-system, sans-serif;
+      z-index: 300; opacity: 0; pointer-events: none;
+      transition: opacity 0.3s; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Element picker */
+    #picker-panel {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 28px) + 80px);
+      left: 50%; transform: translateX(-50%) translateY(20px);
+      z-index: 250; background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(20px); border-radius: 24px;
+      padding: 18px 20px 16px; box-shadow: 0 8px 40px rgba(0,0,0,0.28);
+      width: min(340px, 92vw); opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    #picker-panel.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0); }
+    #picker-panel h4 {
+      font-family: -apple-system, sans-serif; font-size: 13px; font-weight: 800;
+      color: #6d28d9; text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 12px; text-align: center;
+    }
+    .picker-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .picker-item {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: #f5f3ff; border: 2px solid #e0d6ff; border-radius: 16px;
+      padding: 10px 6px; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      user-select: none;
+    }
+    .picker-item.off { background: #f1f5f9; border-color: #e2e8f0; opacity: 0.55; }
+    .picker-item .pi-icon  { font-size: 22px; }
+    .picker-item .pi-label { font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 700; color: #4b5563; }
+    #picker-panel .picker-note { font-family: -apple-system, sans-serif; font-size: 11px; color: #9ca3af; text-align: center; margin-top: 10px; }
+
+    /* Permission screen */
+    #permission-screen {
+      position: fixed; inset: 0; z-index: 800;
+      background: linear-gradient(160deg, #fce4ec 0%, #e8f5e9 50%, #e3f2fd 100%);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 32px 24px; gap: 20px;
+    }
+    #permission-screen.hidden { display: none; }
+    #permission-screen h2 { font-family: -apple-system, sans-serif; font-size: 22px; font-weight: 800; color: #6d28d9; text-align: center; }
+    #permission-screen p  { font-family: -apple-system, sans-serif; font-size: 15px; color: #4b5563; text-align: center; line-height: 1.6; max-width: 340px; }
+    #permission-screen .privacy-note {
+      background: rgba(109,40,217,0.07); border-radius: 14px; padding: 14px 18px;
+      font-size: 13px; color: #6b7280; text-align: center; max-width: 340px; line-height: 1.55;
+    }
+    .perm-btn {
+      background: linear-gradient(135deg, #6d28d9, #8b5cf6); color: #fff;
+      border: none; border-radius: 50px; padding: 16px 36px;
+      font-family: -apple-system, sans-serif; font-size: 17px; font-weight: 700;
+      cursor: pointer; box-shadow: 0 6px 24px rgba(109,40,217,0.38); transition: transform 0.12s;
+    }
+    .perm-btn:active { transform: scale(0.96); }
+    .egg-icon { font-size: 52px; }
+  </style>
+</head>
+<body>
+
+<!-- Permission screen -->
+<div id="permission-screen">
+  <div class="egg-icon">🥚🐰🌸</div>
+  <h2>Easter AR Magic</h2>
+  <p>Discover a magical spring world with Easter eggs, friendly bunnies and butterflies appearing all around you.</p>
+  <div class="privacy-note">
+    🔒 <strong>Privacy first:</strong> your camera is used only to display the AR scene. Nothing is recorded or sent anywhere. Photos stay only on your device.
+  </div>
+  <button class="perm-btn" onclick="requestCameraAndStart()">🌿 Allow Camera &amp; Start</button>
+</div>
+
+<!-- Loading screen -->
+<div id="loading-screen" class="hidden" style="display:none;">
+  <div class="load-eggs">
+    <div class="load-egg"></div><div class="load-egg"></div><div class="load-egg"></div>
+  </div>
+  <p class="load-text">Preparing your Easter magic…</p>
+</div>
+
+<!-- Camera video background -->
+<video id="ar-camera" autoplay playsinline muted></video>
+
+<!-- Flash + toast -->
+<div id="flash"></div>
+<div id="toast">📸 Photo saved to your device!</div>
+
+<!-- Back button + selfie badge -->
+<button id="back-btn" onclick="window.location.href='index.html'">← Back</button>
+<div id="selfie-badge">🤳 Selfie — elements repositioned</div>
+
+<!-- Element picker panel -->
+<div id="picker-panel">
+  <h4>✨ Decoration elements</h4>
+  <div class="picker-grid">
+    <div class="picker-item" id="pick-eggs"        onclick="toggleGroup('group-eggs','pick-eggs')">
+      <span class="pi-icon">🥚</span><span class="pi-label">Eggs</span>
+    </div>
+    <div class="picker-item" id="pick-rabbits"     onclick="toggleGroup('group-rabbits','pick-rabbits')">
+      <span class="pi-icon">🐰</span><span class="pi-label">Rabbits</span>
+    </div>
+    <div class="picker-item" id="pick-butterflies" onclick="toggleGroup('group-butterflies','pick-butterflies')">
+      <span class="pi-icon">🦋</span><span class="pi-label">Butterflies</span>
+    </div>
+    <div class="picker-item" id="pick-flowers"     onclick="toggleGroup('group-flowers','pick-flowers')">
+      <span class="pi-icon">🌸</span><span class="pi-label">Flowers</span>
+    </div>
+    <div class="picker-item" id="pick-pollen"      onclick="toggleGroup('pollen-root','pick-pollen')">
+      <span class="pi-icon">✨</span><span class="pi-label">Pollen</span>
+    </div>
+    <div class="picker-item" id="pick-grass"       onclick="toggleGroup('grass-root','pick-grass')">
+      <span class="pi-icon">🌿</span><span class="pi-label">Grass</span>
+    </div>
+  </div>
+  <p class="picker-note">Tap to show/hide · Turn around to see all elements!</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     A-FRAME SCENE
+══════════════════════════════════════════════════════════════ -->
+<a-scene
+  id="ar-scene"
+  embedded
+  renderer="alpha: true; antialias: true; colorManagement: true; highRefreshRate: true; preserveDrawingBuffer: true"
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+  device-orientation-permission-ui="enabled: false">
+
+  <a-assets timeout="3000"></a-assets>
+
+  <!-- ── Lighting — warm dawn + sky fill ───────────────── -->
+  <a-light type="ambient"     color="#ffe0c8" intensity="1.1"></a-light>
+  <a-light type="ambient"     color="#c8d8ff" intensity="0.35"></a-light>
+  <a-light type="directional" color="#fff8e7" intensity="0.8" position="4 8 2"></a-light>
+  <a-light type="point" color="#ffb3c6" intensity="0.7" distance="10" position="-2 3 -2"></a-light>
+  <a-light type="point" color="#b3d9ff" intensity="0.4" distance="10" position="3 3  2"></a-light>
+  <a-light type="point" color="#c8f5c8" intensity="0.3" distance="8"  position="0 2  3"></a-light>
+
+  <!-- ── Ground — semi-transparent spring grass ────────── -->
+  <a-plane rotation="-90 0 0" position="0 -0.56 0"
+    width="5" height="5"
+    material="color:#5a9e3a; opacity:1; transparent:false; roughness:1">
+  </a-plane>
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: EASTER EGGS — distributed 360° around person
+       Each egg is at a different compass angle & height
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-eggs">
+
+    <!-- Egg 1 — Blush Pink | front-right ~15°, 2.3m -->
+    <a-entity id="egg1" position="0.37 0.70 -1.38"
+      animation="property:position; from:0.37 0.70 -1.38; to:0.37 1.02 -1.38;
+                 dur:3200; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 0 0; to:0 360 0;
+                       dur:11000; loop:true; easing:linear">
+      <a-sphere radius="0.20" scale="1 1.35 1"
+        material="color:#ffb3c6; roughness:0.14; metalness:0.22;
+                  emissive:#ff88a8; emissiveIntensity:0.22"></a-sphere>
+      <a-torus radius="0.20" radius-tubular="0.013" rotation="90 0 0"
+        material="color:#fff; opacity:0.55; transparent:true"></a-torus>
+      <!-- Lacquer highlight -->
+      <a-sphere radius="0.07" position="-0.07 0.14 0.14"
+        material="color:#fff; opacity:0.30; transparent:true; roughness:0"></a-sphere>
+    </a-entity>
+
+    <!-- Egg 2 — Lavender | right side ~100°, 2.5m -->
+    <a-entity id="egg2" position="1.50 1.00 0.27"
+      animation="property:position; from:1.50 1.00 0.27; to:1.50 1.32 0.27;
+                 dur:3900; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 45 0; to:0 405 0;
+                       dur:15000; loop:true; easing:linear">
+      <a-sphere radius="0.22" scale="1 1.35 1"
+        material="color:#c8a2c8; roughness:0.14; metalness:0.25;
+                  emissive:#a070a8; emissiveIntensity:0.18"></a-sphere>
+      <a-torus radius="0.19" radius-tubular="0.013" rotation="90 0 0" position="0 0.06 0"
+        material="color:#ffe0f0; opacity:0.65; transparent:true"></a-torus>
+      <a-torus radius="0.19" radius-tubular="0.013" rotation="90 0 0" position="0 -0.06 0"
+        material="color:#ffe0f0; opacity:0.65; transparent:true"></a-torus>
+      <a-sphere radius="0.07" position="-0.08 0.16 0.14"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity>
+
+    <!-- Egg 3 — Mint Green | behind ~190°, 2.8m -->
+    <a-entity id="egg3" position="-0.30 0.65 1.68"
+      animation="property:position; from:-0.30 0.65 1.68; to:-0.30 0.96 1.68;
+                 dur:2700; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 0 0; to:0 -360 0;
+                       dur:10000; loop:true; easing:linear">
+      <a-sphere radius="0.24" scale="1 1.35 1"
+        material="color:#98e8a0; roughness:0.16; metalness:0.20;
+                  emissive:#60c870; emissiveIntensity:0.18"></a-sphere>
+      <a-torus radius="0.22" radius-tubular="0.015" rotation="90 30 0"
+        material="color:#fffde7; opacity:0.62; transparent:true"></a-torus>
+      <a-sphere radius="0.08" position="-0.08 0.17 0.16"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity>
+
+    <!-- Egg 4 — Soft Yellow | left side ~260°, 2.3m -->
+    <a-entity id="egg4" position="-1.38 1.10 0.25"
+      animation="property:position; from:-1.38 1.10 0.25; to:-1.38 1.42 0.25;
+                 dur:4400; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 90 0; to:0 450 0;
+                       dur:18000; loop:true; easing:linear">
+      <a-sphere radius="0.17" scale="1 1.35 1"
+        material="color:#fff176; roughness:0.12; metalness:0.25;
+                  emissive:#e8c800; emissiveIntensity:0.20"></a-sphere>
+      <a-torus radius="0.15" radius-tubular="0.011" rotation="90 0 0"
+        material="color:#fff8c0; opacity:0.5; transparent:true"></a-torus>
+      <a-sphere radius="0.06" position="-0.06 0.12 0.12"
+        material="color:#fff; opacity:0.30; transparent:true; roughness:0"></a-sphere>
+    </a-entity>
+
+    <!-- Egg 5 — Warm Peach | front-left ~335°, 2.2m -->
+    <a-entity id="egg5" position="-0.57 0.85 -1.22"
+      animation="property:position; from:-0.57 0.85 -1.22; to:-0.57 1.17 -1.22;
+                 dur:3500; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 200 0; to:0 560 0;
+                       dur:13000; loop:true; easing:linear">
+      <a-sphere radius="0.19" scale="1 1.35 1"
+        material="color:#ffcba4; roughness:0.14; metalness:0.22;
+                  emissive:#e89060; emissiveIntensity:0.18"></a-sphere>
+      <a-torus radius="0.165" radius-tubular="0.012" rotation="90 0 0"
+        material="color:#fff; opacity:0.45; transparent:true"></a-torus>
+      <a-torus radius="0.165" radius-tubular="0.012" rotation="0 0 0"
+        material="color:#ffb3c6; opacity:0.45; transparent:true"></a-torus>
+      <a-sphere radius="0.065" position="-0.07 0.14 0.13"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity>
+
+  </a-entity><!-- /group-eggs -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: RABBITS
+       r1 walks in front, r2 sits on the right side
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-rabbits">
+
+    <!-- Rabbit 1 — walking left↔right in front of person -->
+    <a-entity id="r1-walk"
+      animation="property:position; from:-1.2 -0.52 -1.2; to:0.5 -0.52 -1.2;
+                 dur:8500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-entity animation="property:position; from:0 0 0; to:0 0.13 0;
+                           dur:520; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-sphere position="0 0.28 0" radius="0.23"
+          material="color:#f5f0eb; roughness:0.85; metalness:0"></a-sphere>
+        <a-sphere position="0 0.62 0.04" radius="0.17"
+          material="color:#f5f0eb; roughness:0.85; metalness:0"></a-sphere>
+        <!-- Ears -->
+        <a-entity position="-0.065 0.88 0.04">
+          <a-cylinder radius="0.034" height="0.32" material="color:#f0ebe4; roughness:0.9"></a-cylinder>
+          <a-cylinder radius="0.021" height="0.26" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+        </a-entity>
+        <a-entity position="0.065 0.88 0.04">
+          <a-cylinder radius="0.034" height="0.32" material="color:#f0ebe4; roughness:0.9"></a-cylinder>
+          <a-cylinder radius="0.021" height="0.26" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+        </a-entity>
+        <!-- Eyes -->
+        <a-sphere position="-0.070 0.648 0.148" radius="0.024" material="color:#2d1b69; roughness:0; metalness:0.3"></a-sphere>
+        <a-sphere position=" 0.070 0.648 0.148" radius="0.024" material="color:#2d1b69; roughness:0; metalness:0.3"></a-sphere>
+        <a-sphere position="-0.062 0.654 0.163" radius="0.009" material="color:#fff; roughness:0"></a-sphere>
+        <a-sphere position=" 0.078 0.654 0.163" radius="0.009" material="color:#fff; roughness:0"></a-sphere>
+        <!-- Nose -->
+        <a-sphere position="0 0.610 0.166" radius="0.014" material="color:#f08090; roughness:0.7; emissive:#e06070; emissiveIntensity:0.2"></a-sphere>
+        <!-- Cheeks -->
+        <a-sphere position="-0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.40; transparent:true"></a-sphere>
+        <a-sphere position=" 0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.40; transparent:true"></a-sphere>
+        <!-- Tail -->
+        <a-sphere position="0 0.26 -0.22" radius="0.080" material="color:#fff; roughness:1"></a-sphere>
+        <!-- Paws -->
+        <a-sphere position="-0.108 0.10 0.118" radius="0.058" material="color:#f0ebe4; roughness:0.9"></a-sphere>
+        <a-sphere position=" 0.108 0.10 0.118" radius="0.058" material="color:#f0ebe4; roughness:0.9"></a-sphere>
+      </a-entity>
+    </a-entity>
+
+    <!-- Rabbit 2 — sitting, right side of person -->
+    <a-entity id="r2-sit" position="1.5 -0.52 0"
+      animation="property:rotation; from:0 -20 0; to:0 20 0;
+                 dur:4500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-entity animation="property:position; from:0 0 0; to:0 0.04 0;
+                           dur:2200; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity scale="0.74 0.74 0.74">
+          <a-sphere position="0 0.28 0" radius="0.23" material="color:#e8e0d5; roughness:0.85; metalness:0"></a-sphere>
+          <a-sphere position="0 0.62 0.04" radius="0.17" material="color:#e8e0d5; roughness:0.85; metalness:0"></a-sphere>
+          <a-entity position="-0.065 0.88 0.04">
+            <a-cylinder radius="0.034" height="0.30" material="color:#ddd5c8; roughness:0.9"></a-cylinder>
+            <a-cylinder radius="0.021" height="0.24" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+          </a-entity>
+          <a-entity position="0.065 0.88 0.04">
+            <a-cylinder radius="0.034" height="0.30" material="color:#ddd5c8; roughness:0.9"></a-cylinder>
+            <a-cylinder radius="0.021" height="0.24" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+          </a-entity>
+          <a-sphere position="-0.070 0.648 0.148" radius="0.024" material="color:#1a1033; roughness:0; metalness:0.3"></a-sphere>
+          <a-sphere position=" 0.070 0.648 0.148" radius="0.024" material="color:#1a1033; roughness:0; metalness:0.3"></a-sphere>
+          <a-sphere position="-0.062 0.654 0.163" radius="0.009" material="color:#fff; roughness:0"></a-sphere>
+          <a-sphere position=" 0.078 0.654 0.163" radius="0.009" material="color:#fff; roughness:0"></a-sphere>
+          <a-sphere position="0 0.610 0.166" radius="0.014" material="color:#f08090; roughness:0.7; emissive:#e06070; emissiveIntensity:0.2"></a-sphere>
+          <a-sphere position="-0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.38; transparent:true"></a-sphere>
+          <a-sphere position=" 0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.38; transparent:true"></a-sphere>
+          <a-sphere position="0 0.26 -0.22" radius="0.076" material="color:#f8f8f8; roughness:1"></a-sphere>
+        </a-entity>
+      </a-entity>
+    </a-entity>
+
+  </a-entity><!-- /group-rabbits -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: BUTTERFLIES — full 360° orbit around person
+       centerZ:0 so they circle the user, not just the front
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-butterflies">
+
+    <!-- Butterfly 1 — Pink/Lavender, mid orbit -->
+    <a-entity id="bf1" butterfly-orbit="radius:1.10; speed:0.50; height:1.45; phase:0; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-55; to:55;
+                           dur:360; loop:true; dir:alternate; easing:easeInOutSine">
+        <!-- Upper wings -->
+        <a-entity position="-0.155 0 0">
+          <a-sphere radius="0.145" scale="1 0.30 0.80"
+            material="color:#ff7eb5; opacity:0.90; transparent:true; side:double; emissive:#ff4090; emissiveIntensity:0.12"></a-sphere>
+          <!-- Wing spot -->
+          <a-sphere radius="0.038" position="-0.10 0.02 0"
+            material="color:#ff2060; opacity:0.70; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.155 0 0">
+          <a-sphere radius="0.145" scale="1 0.30 0.80"
+            material="color:#ffb3c6; opacity:0.90; transparent:true; side:double; emissive:#ff8090; emissiveIntensity:0.10"></a-sphere>
+          <a-sphere radius="0.038" position="0.10 0.02 0"
+            material="color:#ff2060; opacity:0.70; transparent:true"></a-sphere>
+        </a-entity>
+        <!-- Lower wings -->
+        <a-entity position="-0.115 -0.090 0">
+          <a-sphere radius="0.090" scale="1 0.38 0.85"
+            material="color:#c8a2c8; opacity:0.84; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.115 -0.090 0">
+          <a-sphere radius="0.090" scale="1 0.38 0.85"
+            material="color:#c8a2c8; opacity:0.84; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <!-- Body -->
+        <a-cylinder radius="0.018" height="0.22" rotation="90 0 0"
+          material="color:#3d1f00; roughness:0.6; metalness:0.15"></a-cylinder>
+        <!-- Antennae -->
+        <a-cylinder radius="0.006" height="0.13" position="-0.026 0.11 0" rotation="0 0 -22"
+          material="color:#3d1f00"></a-cylinder>
+        <a-cylinder radius="0.006" height="0.13" position="0.026 0.11 0" rotation="0 0 22"
+          material="color:#3d1f00"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+    <!-- Butterfly 2 — Sky Blue, tighter faster orbit -->
+    <a-entity id="bf2" butterfly-orbit="radius:0.80; speed:0.75; height:1.75; phase:2.1; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-50; to:50;
+                           dur:310; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity position="-0.130 0 0">
+          <a-sphere radius="0.120" scale="1 0.30 0.80"
+            material="color:#80c8ff; opacity:0.90; transparent:true; side:double; emissive:#2090ff; emissiveIntensity:0.12"></a-sphere>
+          <a-sphere radius="0.032" position="-0.085 0.02 0"
+            material="color:#0060e0; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.130 0 0">
+          <a-sphere radius="0.120" scale="1 0.30 0.80"
+            material="color:#87ceeb; opacity:0.90; transparent:true; side:double; emissive:#2090ff; emissiveIntensity:0.10"></a-sphere>
+          <a-sphere radius="0.032" position="0.085 0.02 0"
+            material="color:#0060e0; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="-0.098 -0.078 0">
+          <a-sphere radius="0.075" scale="1 0.38 0.85"
+            material="color:#a0d8ef; opacity:0.82; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.098 -0.078 0">
+          <a-sphere radius="0.075" scale="1 0.38 0.85"
+            material="color:#a0d8ef; opacity:0.82; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-cylinder radius="0.016" height="0.19" rotation="90 0 0"
+          material="color:#1a1033; roughness:0.6; metalness:0.15"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+    <!-- Butterfly 3 — Warm Yellow, wide slow orbit -->
+    <a-entity id="bf3" butterfly-orbit="radius:1.50; speed:0.38; height:1.15; phase:4.2; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-58; to:58;
+                           dur:420; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity position="-0.140 0 0">
+          <a-sphere radius="0.132" scale="1 0.30 0.80"
+            material="color:#ffe033; opacity:0.92; transparent:true; side:double; emissive:#e0a000; emissiveIntensity:0.14"></a-sphere>
+          <a-sphere radius="0.036" position="-0.09 0.02 0"
+            material="color:#e06000; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.140 0 0">
+          <a-sphere radius="0.132" scale="1 0.30 0.80"
+            material="color:#ffee58; opacity:0.92; transparent:true; side:double; emissive:#e0a000; emissiveIntensity:0.12"></a-sphere>
+          <a-sphere radius="0.036" position="0.09 0.02 0"
+            material="color:#e06000; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="-0.105 -0.082 0">
+          <a-sphere radius="0.082" scale="1 0.38 0.85"
+            material="color:#f9a825; opacity:0.80; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.105 -0.082 0">
+          <a-sphere radius="0.082" scale="1 0.38 0.85"
+            material="color:#f9a825; opacity:0.80; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-cylinder radius="0.017" height="0.20" rotation="90 0 0"
+          material="color:#4a1a00; roughness:0.6; metalness:0.15"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+  </a-entity><!-- /group-butterflies -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: SPRING FLOWERS — distributed 360° at ground
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-flowers">
+
+    <!-- Flower A — Pink daisy | front-right ~40°, 2.0m -->
+    <a-entity position="0.78 -0.50 -0.93"
+      animation="property:rotation.z; from:-6; to:6;
+                 dur:2800; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.065" material="color:#fff176; emissive:#f0d000; emissiveIntensity:0.35"></a-sphere>
+      <a-sphere position=" 0.000  0.085 0" radius="0.045" scale="1.7 0.85 1" material="color:#ff90b8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.085 0" radius="0.045" scale="1.7 0.85 1" material="color:#ff6ea0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.085  0.000 0" radius="0.045" scale="0.85 1.7 1" material="color:#ffa0c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.085  0.000 0" radius="0.045" scale="0.85 1.7 1" material="color:#ffa0c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.062  0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ffb3c6; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.062  0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ffb3c6; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.062 -0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ff90b8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.062 -0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ff90b8; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.010" height="0.24" position="0 -0.12 0" material="color:#4caf50"></a-cylinder>
+    </a-entity>
+
+    <!-- Flower B — Lavender | behind-right ~160°, 2.3m -->
+    <a-entity position="0.48 -0.50 1.31"
+      animation="property:rotation.z; from:5; to:-5;
+                 dur:3200; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.058" material="color:#fff176; emissive:#f0d000; emissiveIntensity:0.30"></a-sphere>
+      <a-sphere position=" 0.000  0.075 0" radius="0.040" scale="1.7 0.85 1" material="color:#c8a2c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.075 0" radius="0.040" scale="1.7 0.85 1" material="color:#c8a2c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.075  0.000 0" radius="0.040" scale="0.85 1.7 1" material="color:#b088b0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.075  0.000 0" radius="0.040" scale="0.85 1.7 1" material="color:#b088b0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.055  0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#d8b8d8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.055  0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#d8b8d8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.055 -0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#c898c8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.055 -0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#c898c8; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.009" height="0.22" position="0 -0.11 0" material="color:#388e3c"></a-cylinder>
+    </a-entity>
+
+    <!-- Flower C — Blue | left ~270°, 2.5m -->
+    <a-entity position="-1.50 -0.50 0.0"
+      animation="property:rotation.z; from:-4; to:7;
+                 dur:2500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.060" material="color:#fff; emissive:#e8f8ff; emissiveIntensity:0.25"></a-sphere>
+      <a-sphere position=" 0.000  0.078 0" radius="0.043" scale="1.7 0.85 1" material="color:#87ceeb; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.078 0" radius="0.043" scale="1.7 0.85 1" material="color:#87ceeb; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.078  0.000 0" radius="0.043" scale="0.85 1.7 1" material="color:#b3e0ff; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.078  0.000 0" radius="0.043" scale="0.85 1.7 1" material="color:#b3e0ff; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.057  0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.057  0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.057 -0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.057 -0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.009" height="0.26" position="0 -0.13 0" material="color:#4caf50"></a-cylinder>
+    </a-entity>
+
+  </a-entity><!-- /group-flowers -->
+
+
+  <!-- Pollen + Grass injected via JS components -->
+  <a-entity id="pollen-root" pollen-system="count:28"></a-entity>
+  <a-entity id="grass-root"  grass-ring="radius:1.8; count:32"></a-entity>
+
+
+  <!-- Camera — look-controls for gyroscope AR -->
+  <a-camera id="ar-cam" position="0 0 0"
+    look-controls="enabled:true; reverseMouseDrag:false"
+    wasd-controls="enabled:false">
+  </a-camera>
+
+</a-scene>
+
+<!-- Bottom UI bar -->
+<div id="ui-bar">
+  <button class="ui-btn" id="flip-btn"         onclick="flipCamera()"   title="Flip camera">🔄</button>
+  <button class="ui-btn" id="photo-btn"         onclick="takePhoto()">📸 Take Photo</button>
+  <button class="ui-btn" id="picker-toggle-btn" onclick="togglePicker()" title="Elements">🎨</button>
+</div>
+
+
+<script>
+'use strict';
+
+// ── Butterfly orbit — full 360° around person ─────────────────────
+AFRAME.registerComponent('butterfly-orbit', {
+  schema: {
+    radius:  { default: 1.8  },
+    speed:   { default: 0.5  },
+    height:  { default: 1.5  },
+    phase:   { default: 0.0  },
+    centerZ: { default: 0.0  },  // orbit center Z (0 = around person)
+    offsetY: { default: 0.0  }   // extra lift for selfie mode
+  },
+  init() { this.angle = this.data.phase; },
+  tick(time, delta) {
+    this.angle += (delta / 1000) * this.data.speed;
+    const a = this.angle;
+    const x = Math.cos(a) * this.data.radius;
+    const z = Math.sin(a) * this.data.radius + this.data.centerZ;
+    const y = this.data.height + this.data.offsetY + Math.sin(a * 1.8) * 0.16;
+    this.el.object3D.position.set(x, y, z);
+    this.el.object3D.rotation.y = -(a - Math.PI / 2);
+  }
+});
+
+// ── Pollen — 360° around person ───────────────────────────────────
+AFRAME.registerComponent('pollen-system', {
+  schema: { count: { default: 28 } },
+  init() {
+    const palette = ['#fffde7','#fff9c4','#fffacd','#f0fff0','#fff0f5','#fef9e7','#ffe8f5'];
+    for (let i = 0; i < this.data.count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r     = 0.8 + Math.random() * 3.5;
+      const x     = Math.cos(angle) * r;
+      const z     = Math.sin(angle) * r;
+      const y     = Math.random() * 3.5;
+      const endR  = r + (Math.random() - 0.5) * 1.2;
+      const endX  = Math.cos(angle + 0.3) * endR;
+      const sz    = 0.013 + Math.random() * 0.022;
+      const dur   = 5000 + Math.random() * 7000;
+      const col   = palette[Math.floor(Math.random() * palette.length)];
+      const op    = 0.35 + Math.random() * 0.50;
+
+      const p = document.createElement('a-sphere');
+      p.setAttribute('radius', sz);
+      p.setAttribute('material', `color:${col}; opacity:${op}; transparent:true; roughness:0.2`);
+      p.setAttribute('animation__float',
+        `property:position; from:${x} ${y} ${z}; to:${endX} ${y + 2.8} ${z + 0.3};
+         dur:${dur}; loop:true; easing:linear`);
+      p.setAttribute('animation__fade',
+        `property:components.material.material.opacity; from:${op}; to:0;
+         dur:${dur}; loop:true; easing:linear`);
+      this.el.appendChild(p);
+    }
+  }
+});
+
+// ── Grass ring — full circle around person ────────────────────────
+AFRAME.registerComponent('grass-ring', {
+  schema: { radius: { default: 2.8 }, count: { default: 32 } },
+  init() {
+    const greens = ['#4caf50','#388e3c','#66bb6a','#43a047','#558b2f','#7cb342','#2e7d32'];
+    for (let i = 0; i < this.data.count; i++) {
+      const angle = (i / this.data.count) * Math.PI * 2;
+      const r     = this.data.radius + (Math.random() - 0.5) * 1.0;
+      const x     = Math.cos(angle) * r;
+      const z     = Math.sin(angle) * r;
+      const h     = 0.15 + Math.random() * 0.30;
+      const col   = greens[Math.floor(Math.random() * greens.length)];
+      const lean  = (Math.random() - 0.5) * 24;
+      const dur   = 1400 + Math.random() * 1600;
+
+      const blade = document.createElement('a-cylinder');
+      blade.setAttribute('position', `${x} ${-0.52 + h / 2} ${z}`);
+      blade.setAttribute('radius',   '0.018');
+      blade.setAttribute('height',   h);
+      blade.setAttribute('rotation', `0 ${Math.random() * 360} ${lean}`);
+      blade.setAttribute('material', `color:${col}; roughness:1`);
+      blade.setAttribute('animation',
+        `property:rotation; from:0 0 ${lean}; to:0 0 ${lean + 10};
+         dur:${dur}; loop:true; dir:alternate; easing:easeInOutSine`);
+      this.el.appendChild(blade);
+    }
+  }
+});
+
+
+// ── Selfie layout — push front eggs higher/aside ──────────────────
+const EGG_POSITIONS = {
+  normal: [
+    { id:'egg1', from: '0.37 0.70 -1.38', to: '0.37 1.02 -1.38', dur:3200 },
+    { id:'egg2', from: '1.50 1.00  0.27', to: '1.50 1.32  0.27', dur:3900 },
+    { id:'egg3', from:'-0.30 0.65  1.68', to:'-0.30 0.96  1.68', dur:2700 },
+    { id:'egg4', from:'-1.38 1.10  0.25', to:'-1.38 1.42  0.25', dur:4400 },
+    { id:'egg5', from:'-0.57 0.85 -1.22', to:'-0.57 1.17 -1.22', dur:3500 }
+  ],
+  selfie: [
+    // egg1 (front-right) & egg5 (front-left) lifted into top corners
+    { id:'egg1', from: '1.50 1.85 -1.50', to: '1.50 2.15 -1.50', dur:3200 },
+    { id:'egg2', from: '1.50 1.00  0.27', to: '1.50 1.32  0.27', dur:3900 }, // side — unchanged
+    { id:'egg3', from:'-0.30 0.65  1.68', to:'-0.30 0.96  1.68', dur:2700 }, // behind — unchanged
+    { id:'egg4', from:'-1.38 1.10  0.25', to:'-1.38 1.42  0.25', dur:4400 }, // side — unchanged
+    { id:'egg5', from:'-1.50 1.85 -1.50', to:'-1.50 2.15 -1.50', dur:3500 }
+  ]
+};
+
+function setSelfieLayout(isSelfie) {
+  const layout = isSelfie ? 'selfie' : 'normal';
+  EGG_POSITIONS[layout].forEach(({ id, from, to, dur }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('animation',
+      `property:position; from:${from}; to:${to}; dur:${dur}; loop:true; dir:alternate; easing:easeInOutSine`);
+  });
+
+  const bfOffsetY = isSelfie ? 0.9 : 0;
+  ['bf1','bf2','bf3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.components['butterfly-orbit'])
+      el.setAttribute('butterfly-orbit', 'offsetY', bfOffsetY);
+  });
+
+  document.getElementById('selfie-badge').classList.toggle('visible', isSelfie);
+}
+
+
+// ── Camera stream ─────────────────────────────────────────────────
+let stream = null;
+let facingMode = 'environment';
+
+async function startCameraStream() {
+  const video = document.getElementById('ar-camera');
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    return true;
+  } catch (err) {
+    console.warn('Camera unavailable:', err.message);
+    document.body.style.background = 'linear-gradient(160deg, #0d1b2a 0%, #1a0a2e 50%, #0d1b2a 100%)';
+    return false;
+  }
+}
+
+async function flipCamera() {
+  const btn = document.getElementById('flip-btn');
+  btn.disabled = true;
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  const video = document.getElementById('ar-camera');
+  video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+  setSelfieLayout(facingMode === 'user');
+  await startCameraStream();
+  btn.disabled = false;
+}
+
+// ── Permission → start ────────────────────────────────────────────
+async function requestCameraAndStart() {
+  const permScreen = document.getElementById('permission-screen');
+  const loadScreen = document.getElementById('loading-screen');
+  permScreen.classList.add('hidden');
+  loadScreen.style.display = 'flex';
+  await startCameraStream();
+  const scene = document.getElementById('ar-scene');
+  const onLoaded = () => {
+    setTimeout(() => {
+      loadScreen.classList.add('fade-out');
+      setTimeout(() => { loadScreen.style.display = 'none'; }, 950);
+    }, 600);
+  };
+  if (scene.hasLoaded) onLoaded();
+  else scene.addEventListener('loaded', onLoaded, { once: true });
+}
+
+
+// ── Element picker ────────────────────────────────────────────────
+const groupVisible = {
+  'group-eggs': true, 'group-rabbits': true, 'group-butterflies': true,
+  'group-flowers': true, 'pollen-root': true, 'grass-root': true
+};
+let pickerOpen = false;
+
+function togglePicker() {
+  pickerOpen = !pickerOpen;
+  document.getElementById('picker-panel').classList.toggle('open', pickerOpen);
+}
+
+function toggleGroup(groupId, btnId) {
+  groupVisible[groupId] = !groupVisible[groupId];
+  const el = document.getElementById(groupId);
+  if (el) el.setAttribute('visible', groupVisible[groupId]);
+  document.getElementById(btnId).classList.toggle('off', !groupVisible[groupId]);
+}
+
+document.addEventListener('click', (e) => {
+  if (!pickerOpen) return;
+  const panel = document.getElementById('picker-panel');
+  const btn   = document.getElementById('picker-toggle-btn');
+  if (!panel.contains(e.target) && e.target !== btn) {
+    pickerOpen = false;
+    panel.classList.remove('open');
+  }
+});
+
+
+// ── Photo capture ─────────────────────────────────────────────────
+function takePhoto() {
+  const btn = document.getElementById('photo-btn');
+  btn.disabled = true;
+
+  requestAnimationFrame(() => {
+    const video = document.getElementById('ar-camera');
+    const scene = document.getElementById('ar-scene');
+
+    // Force render into WebGL canvas before reading it
+    if (scene && scene.renderer && scene.object3D && scene.camera) {
+      try { scene.renderer.render(scene.object3D, scene.camera); } catch(e) {}
+    }
+
+    const arCanvas = scene ? (scene.canvas || scene.querySelector('canvas')) : null;
+    const dpr = window.devicePixelRatio || 1;
+    const W   = Math.floor(window.innerWidth  * dpr);
+    const H   = Math.floor(window.innerHeight * dpr);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    if (video && video.readyState >= 2) {
+      const vW = video.videoWidth  || W;
+      const vH = video.videoHeight || H;
+      const scale = Math.max(W / vW, H / vH);
+      const drawW = vW * scale, drawH = vH * scale;
+      ctx.drawImage(video, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
+    } else {
+      ctx.fillStyle = '#0d1b2a';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    if (arCanvas && arCanvas.width > 0) {
+      try { ctx.drawImage(arCanvas, 0, 0, W, H); } catch(e) {}
+    }
+
+    const flash = document.getElementById('flash');
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+
+    try {
+      canvas.toBlob(blob => {
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `easter-magic-${Date.now()}.png`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+        showToast('📸 Photo saved to your device!');
+      }, 'image/png');
+    } catch(e) {
+      showToast('Try a screenshot instead 🙏');
+    }
+
+    setTimeout(() => { btn.disabled = false; }, 1600);
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+});
+</script>
+
+</body>
+</html>
