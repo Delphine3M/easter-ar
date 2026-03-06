@@ -735,7 +735,7 @@ async function flipCamera() {
   btn.disabled = true;
   facingMode = facingMode === 'environment' ? 'user' : 'environment';
   const video = document.getElementById('ar-camera');
-  video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+  video.style.transform = 'scaleX(1)';
   setSelfieLayout(facingMode === 'user');
   await startCameraStream();
   btn.disabled = false;
