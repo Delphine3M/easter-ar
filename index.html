@@ -314,7 +314,7 @@
     </div>
 
     <!-- Start button (always shown, primary CTA on mobile) -->
-    <a class="btn-start" href="ar.html" id="start-btn">
+    <a class="btn-start" href="ar_easter_v2.html" id="start-btn">
       <span>Start AR Experience</span>
       <span class="btn-arrow">→</span>
     </a>
@@ -330,7 +330,7 @@
     const isDesktop = window.innerWidth >= 768 && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isDesktop) {
       try {
-        const arUrl = new URL('ar.html', window.location.href).href;
+        const arUrl = new URL('ar_easter_v2.html', window.location.href).href;
         document.getElementById('qr-url-label').textContent = arUrl;
         new QRCode(document.getElementById('qr-code'), {
           text: arUrl,
