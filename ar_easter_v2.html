@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Easter AR Magic</title>
+
+  <!-- A-Frame 1.4.2 — MIT licence, open-source -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #ar-camera {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    a-scene { position: fixed; inset: 0; z-index: 1; }
+    .a-canvas { background: transparent !important; }
+
+    /* Loading */
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 900;
+      background: linear-gradient(160deg, #fce4ec 0%, #e8f5e9 50%, #e3f2fd 100%);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; transition: opacity 0.9s ease;
+    }
+    #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+    .load-eggs { display: flex; gap: 12px; align-items: flex-end; }
+    .load-egg { border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; animation: eggBounce 1.2s ease-in-out infinite; }
+    .load-egg:nth-child(1) { width:28px; height:36px; background:#ffb3c6; animation-delay:0s;    }
+    .load-egg:nth-child(2) { width:36px; height:46px; background:#c8a2c8; animation-delay:0.18s; }
+    .load-egg:nth-child(3) { width:28px; height:36px; background:#98e8a0; animation-delay:0.36s; }
+    @keyframes eggBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+    .load-text { font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 600; color: #6d28d9; }
+
+    /* Back button */
+    #back-btn {
+      position: fixed; top: env(safe-area-inset-top, 16px); left: 16px;
+      z-index: 200; background: rgba(255,255,255,0.88); border: none;
+      border-radius: 50px; padding: 10px 18px;
+      font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 700;
+      color: #6d28d9; cursor: pointer;
+      backdrop-filter: blur(12px); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+      transition: transform 0.12s;
+    }
+    #back-btn:active { transform: scale(0.95); }
+
+    /* Selfie badge */
+    #selfie-badge {
+      position: fixed; top: env(safe-area-inset-top, 16px); right: 16px;
+      z-index: 200; background: rgba(109,40,217,0.85); color: #fff;
+      border-radius: 50px; padding: 8px 14px;
+      font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 700;
+      backdrop-filter: blur(12px); display: none;
+    }
+    #selfie-badge.visible { display: block; }
+
+    /* Zoom indicator */
+    #zoom-indicator {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 300; background: rgba(30,20,60,0.72); color: #fff;
+      border-radius: 12px; padding: 10px 20px;
+      font-family: -apple-system, sans-serif; font-size: 18px; font-weight: 700;
+      pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    }
+    #zoom-indicator.show { opacity: 1; }
+    #zoom-reset-btn {
+      position: fixed; top: env(safe-area-inset-top, 16px);
+      left: 50%; transform: translateX(-50%);
+      z-index: 200; background: rgba(255,255,255,0.88); border: none;
+      border-radius: 50px; padding: 8px 16px;
+      font-family: -apple-system, sans-serif; font-size: 13px; font-weight: 700;
+      color: #6d28d9; cursor: pointer;
+      backdrop-filter: blur(12px); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+      display: none;
+    }
+    #zoom-reset-btn.visible { display: block; }
+
+    /* Bottom UI bar */
+    #ui-bar {
+      position: fixed; bottom: env(safe-area-inset-bottom, 28px);
+      left: 0; right: 0; display: flex; justify-content: center;
+      align-items: center; gap: 12px; z-index: 200; padding: 0 20px;
+      pointer-events: none;
+    }
+    .ui-btn {
+      pointer-events: all; background: rgba(255,255,255,0.9); border: none;
+      border-radius: 50px; padding: 14px 22px;
+      font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 700;
+      color: #3d1f6e; cursor: pointer;
+      backdrop-filter: blur(14px); box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .ui-btn:active { transform: scale(0.95); box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+    #photo-btn         { font-size: 18px; padding: 16px 28px; }
+    #flip-btn          { font-size: 20px; padding: 14px 18px; }
+    #picker-toggle-btn { font-size: 20px; padding: 14px 18px; }
+
+    /* Flash */
+    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; z-index: 500; pointer-events: none; }
+    #flash.go { animation: flashAnim 0.55s ease-out forwards; }
+    @keyframes flashAnim { 0%{opacity:0.95} 100%{opacity:0} }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: calc(env(safe-area-inset-bottom, 28px) + 88px);
+      left: 50%; transform: translateX(-50%);
+      background: rgba(30,20,60,0.82); color: #fff;
+      padding: 11px 22px; border-radius: 24px;
+      font-size: 14px; font-weight: 600; font-family: -apple-system, sans-serif;
+      z-index: 300; opacity: 0; pointer-events: none;
+      transition: opacity 0.3s; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Element picker */
+    #picker-panel {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 28px) + 80px);
+      left: 50%; transform: translateX(-50%) translateY(20px);
+      z-index: 250; background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(20px); border-radius: 24px;
+      padding: 18px 20px 16px; box-shadow: 0 8px 40px rgba(0,0,0,0.28);
+      width: min(340px, 92vw); opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    #picker-panel.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0); }
+    #picker-panel h4 {
+      font-family: -apple-system, sans-serif; font-size: 13px; font-weight: 800;
+      color: #6d28d9; text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 12px; text-align: center;
+    }
+    .picker-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .picker-item {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: #f5f3ff; border: 2px solid #e0d6ff; border-radius: 16px;
+      padding: 10px 6px; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      user-select: none;
+    }
+    .picker-item.off { background: #f1f5f9; border-color: #e2e8f0; opacity: 0.55; }
+    .picker-item .pi-icon  { font-size: 22px; }
+    .picker-item .pi-label { font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 700; color: #4b5563; }
+    #picker-panel .picker-note { font-family: -apple-system, sans-serif; font-size: 11px; color: #9ca3af; text-align: center; margin-top: 10px; }
+
+    /* Logo selector */
+    .logo-section { border-top: 1px solid #e0d6ff; margin-top: 14px; padding-top: 12px; }
+    .logo-section h4 { margin-bottom: 10px; }
+    .logo-row { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+    .logo-btn {
+      font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 700;
+      border: 2px solid #e0d6ff; border-radius: 20px; padding: 7px 13px;
+      background: #f5f3ff; color: #4b5563; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .logo-btn.active { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+    .logo-btn[data-logo="trimane"].active { background: #0d47a1; border-color: #0d47a1; }
+    .logo-btn[data-logo="iorga"].active   { background: #1b5e20; border-color: #1b5e20; }
+    .logo-btn[data-logo="capitalb"].active{ background: #b71c1c; border-color: #b71c1c; }
+
+    /* Permission screen */
+    #permission-screen {
+      position: fixed; inset: 0; z-index: 800;
+      background: linear-gradient(160deg, #fce4ec 0%, #e8f5e9 50%, #e3f2fd 100%);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 32px 24px; gap: 20px;
+    }
+    #permission-screen.hidden { display: none; }
+    #permission-screen h2 { font-family: -apple-system, sans-serif; font-size: 22px; font-weight: 800; color: #6d28d9; text-align: center; }
+    #permission-screen p  { font-family: -apple-system, sans-serif; font-size: 15px; color: #4b5563; text-align: center; line-height: 1.6; max-width: 340px; }
+    #permission-screen .privacy-note {
+      background: rgba(109,40,217,0.07); border-radius: 14px; padding: 14px 18px;
+      font-size: 13px; color: #6b7280; text-align: center; max-width: 340px; line-height: 1.55;
+    }
+    .perm-btn {
+      background: linear-gradient(135deg, #6d28d9, #8b5cf6); color: #fff;
+      border: none; border-radius: 50px; padding: 16px 36px;
+      font-family: -apple-system, sans-serif; font-size: 17px; font-weight: 700;
+      cursor: pointer; box-shadow: 0 6px 24px rgba(109,40,217,0.38); transition: transform 0.12s;
+    }
+    .perm-btn:active { transform: scale(0.96); }
+    .egg-icon { font-size: 52px; }
+  </style>
+</head>
+<body>
+
+<!-- Permission screen -->
+<div id="permission-screen">
+  <div class="egg-icon">🥚🐰🌸</div>
+  <h2>Easter AR Magic</h2>
+  <p>Discover a magical spring world with Easter eggs, friendly bunnies and butterflies appearing all around you.</p>
+  <div class="privacy-note">
+    🔒 <strong>Privacy first:</strong> your camera is used only to display the AR scene. Nothing is recorded or sent anywhere. Photos stay only on your device.
+  </div>
+  <button class="perm-btn" onclick="requestCameraAndStart()">🌿 Allow Camera &amp; Start</button>
+</div>
+
+<!-- Loading screen -->
+<div id="loading-screen" class="hidden" style="display:none;">
+  <div class="load-eggs">
+    <div class="load-egg"></div><div class="load-egg"></div><div class="load-egg"></div>
+  </div>
+  <p class="load-text">Preparing your Easter magic…</p>
+</div>
+
+<!-- Camera video background -->
+<video id="ar-camera" autoplay playsinline muted></video>
+
+<!-- Flash + toast -->
+<div id="flash"></div>
+<div id="toast">📸 Photo saved to your device!</div>
+
+<!-- Back button + selfie badge -->
+<button id="back-btn" onclick="window.location.href='index.html'">← Back</button>
+<div id="selfie-badge">🤳 Selfie — elements repositioned</div>
+<div id="zoom-indicator">🔍 1.0×</div>
+<button id="zoom-reset-btn" onclick="resetZoom()">🔍 Reset zoom</button>
+
+<!-- Element picker panel -->
+<div id="picker-panel">
+  <h4>✨ Decoration elements</h4>
+  <div class="picker-grid">
+    <div class="picker-item" id="pick-eggs"        onclick="toggleGroup('group-eggs','pick-eggs')">
+      <span class="pi-icon">🥚</span><span class="pi-label">Eggs</span>
+    </div>
+    <div class="picker-item" id="pick-rabbits"     onclick="toggleGroup('group-rabbits','pick-rabbits')">
+      <span class="pi-icon">🐰</span><span class="pi-label">Rabbits</span>
+    </div>
+    <div class="picker-item" id="pick-butterflies" onclick="toggleGroup('group-butterflies','pick-butterflies')">
+      <span class="pi-icon">🦋</span><span class="pi-label">Butterflies</span>
+    </div>
+    <div class="picker-item" id="pick-flowers"     onclick="toggleGroup('group-flowers','pick-flowers')">
+      <span class="pi-icon">🌸</span><span class="pi-label">Flowers</span>
+    </div>
+    <div class="picker-item" id="pick-pollen"      onclick="toggleGroup('pollen-root','pick-pollen')">
+      <span class="pi-icon">✨</span><span class="pi-label">Pollen</span>
+    </div>
+    <div class="picker-item" id="pick-grass"       onclick="toggleGroup('grass-root','pick-grass')">
+      <span class="pi-icon">🌿</span><span class="pi-label">Grass</span>
+    </div>
+  </div>
+  <p class="picker-note">Tap to show/hide · Turn around to see all elements!</p>
+
+  <div class="logo-section">
+    <h4>🥚 Logo sur les œufs</h4>
+    <div class="logo-row">
+      <button class="logo-btn active" data-logo="none"     onclick="setEggLogo('none')">🥚 Normal</button>
+      <button class="logo-btn"        data-logo="trimane"  onclick="setEggLogo('trimane')">Trimane</button>
+      <button class="logo-btn"        data-logo="iorga"    onclick="setEggLogo('iorga')">Iorga</button>
+      <button class="logo-btn"        data-logo="capitalb" onclick="setEggLogo('capitalb')">Capital B</button>
+      <button class="logo-btn"        data-logo="xdev"     onclick="setEggLogo('xdev')">Xdev</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     A-FRAME SCENE
+══════════════════════════════════════════════════════════════ -->
+<a-scene
+  id="ar-scene"
+  embedded
+  renderer="alpha: true; antialias: true; colorManagement: true; highRefreshRate: true; preserveDrawingBuffer: true; shadowMapEnabled: true; shadowMapType: PCFSoftShadowMap"
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+  device-orientation-permission-ui="enabled: false">
+
+  <a-assets timeout="3000"></a-assets>
+
+  <!-- ── Lighting — warm dawn + sky fill ───────────────── -->
+  <a-light type="ambient"     color="#ffe0c8" intensity="1.1"></a-light>
+  <a-light type="ambient"     color="#c8d8ff" intensity="0.35"></a-light>
+  <a-light type="directional" color="#fff8e7" intensity="1.1" position="4 8 2"
+    shadow="cast: true; shadowMapWidth: 1024; shadowMapHeight: 1024; shadowCameraFar: 15; shadowCameraTop: 5; shadowCameraRight: 5; shadowCameraBottom: -5; shadowCameraLeft: -5; shadowBias: -0.001"></a-light>
+  <a-light type="point" color="#ffb3c6" intensity="0.7" distance="10" position="-2 3 -2"></a-light>
+  <a-light type="point" color="#b3d9ff" intensity="0.4" distance="10" position="3 3  2"></a-light>
+  <a-light type="point" color="#c8f5c8" intensity="0.3" distance="8"  position="0 2  3"></a-light>
+
+  <!-- ── Ground — semi-transparent spring grass ────────── -->
+  <a-plane rotation="-90 0 0" position="0 -1.10 0"
+    width="8" height="8"
+    material="color:#5a9e3a; opacity:1; transparent:false; roughness:0.95"
+    shadow="receive: true">
+  </a-plane>
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: EASTER EGGS — distributed 360° around person
+       Each egg is at a different compass angle & height
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-eggs">
+
+    <!-- Egg 1 — Blush Pink | front-right ~15°, 2.3m -->
+    <a-entity id="egg-wrap1"><a-entity id="egg1" position="0.37 0.16 -1.38"
+      animation="property:position; from:0.37 0.16 -1.38; to:0.37 0.48 -1.38;
+                 dur:3200; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 0 0; to:0 360 0;
+                       dur:11000; loop:true; easing:linear">
+      <a-sphere radius="0.20" scale="1 1.35 1" shadow="cast: true"
+        material="color:#ffb3c6; roughness:0.04; metalness:0.12;
+                  emissive:#ff88a8; emissiveIntensity:0.18"></a-sphere>
+      <a-torus radius="0.20" radius-tubular="0.013" rotation="90 0 0"
+        material="color:#fff; opacity:0.65; transparent:true; roughness:0"></a-torus>
+      <!-- Lacquer highlights -->
+      <a-sphere radius="0.07" position="-0.07 0.14 0.14"
+        material="color:#fff; opacity:0.45; transparent:true; roughness:0"></a-sphere>
+      <a-sphere radius="0.03" position="0.06 -0.08 0.17"
+        material="color:#fff; opacity:0.25; transparent:true; roughness:0"></a-sphere>
+    </a-entity></a-entity><!-- /egg-wrap1 -->
+
+    <!-- Egg 2 — Lavender | right side ~100°, 2.5m -->
+    <a-entity id="egg-wrap2"><a-entity id="egg2" position="1.50 0.46 0.27"
+      animation="property:position; from:1.50 0.46 0.27; to:1.50 0.78 0.27;
+                 dur:3900; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 45 0; to:0 405 0;
+                       dur:15000; loop:true; easing:linear">
+      <a-sphere radius="0.22" scale="1 1.35 1" shadow="cast: true"
+        material="color:#c8a2c8; roughness:0.04; metalness:0.12;
+                  emissive:#a070a8; emissiveIntensity:0.14"></a-sphere>
+      <a-torus radius="0.19" radius-tubular="0.013" rotation="90 0 0" position="0 0.06 0"
+        material="color:#ffe0f0; opacity:0.65; transparent:true"></a-torus>
+      <a-torus radius="0.19" radius-tubular="0.013" rotation="90 0 0" position="0 -0.06 0"
+        material="color:#ffe0f0; opacity:0.65; transparent:true"></a-torus>
+      <a-sphere radius="0.07" position="-0.08 0.16 0.14"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity></a-entity><!-- /egg-wrap2 -->
+
+    <!-- Egg 3 — Mint Green | behind ~190°, 2.8m -->
+    <a-entity id="egg-wrap3"><a-entity id="egg3" position="-0.30 0.11 1.68"
+      animation="property:position; from:-0.30 0.11 1.68; to:-0.30 0.42 1.68;
+                 dur:2700; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 0 0; to:0 -360 0;
+                       dur:10000; loop:true; easing:linear">
+      <a-sphere radius="0.24" scale="1 1.35 1" shadow="cast: true"
+        material="color:#98e8a0; roughness:0.04; metalness:0.10;
+                  emissive:#60c870; emissiveIntensity:0.14"></a-sphere>
+      <a-torus radius="0.22" radius-tubular="0.015" rotation="90 30 0"
+        material="color:#fffde7; opacity:0.62; transparent:true"></a-torus>
+      <a-sphere radius="0.08" position="-0.08 0.17 0.16"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity></a-entity><!-- /egg-wrap3 -->
+
+    <!-- Egg 4 — Soft Yellow | left side ~260°, 2.3m -->
+    <a-entity id="egg-wrap4"><a-entity id="egg4" position="-1.38 0.56 0.25"
+      animation="property:position; from:-1.38 0.56 0.25; to:-1.38 0.88 0.25;
+                 dur:4400; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 90 0; to:0 450 0;
+                       dur:18000; loop:true; easing:linear">
+      <a-sphere radius="0.17" scale="1 1.35 1" shadow="cast: true"
+        material="color:#fff176; roughness:0.04; metalness:0.12;
+                  emissive:#e8c800; emissiveIntensity:0.16"></a-sphere>
+      <a-torus radius="0.15" radius-tubular="0.011" rotation="90 0 0"
+        material="color:#fff8c0; opacity:0.5; transparent:true"></a-torus>
+      <a-sphere radius="0.06" position="-0.06 0.12 0.12"
+        material="color:#fff; opacity:0.30; transparent:true; roughness:0"></a-sphere>
+    </a-entity></a-entity><!-- /egg-wrap4 -->
+
+    <!-- Egg 5 — Warm Peach | front-left ~335°, 2.2m -->
+    <a-entity id="egg-wrap5"><a-entity id="egg5" position="-0.57 0.31 -1.22"
+      animation="property:position; from:-0.57 0.31 -1.22; to:-0.57 0.63 -1.22;
+                 dur:3500; loop:true; dir:alternate; easing:easeInOutSine"
+      animation__spin="property:rotation; from:0 200 0; to:0 560 0;
+                       dur:13000; loop:true; easing:linear">
+      <a-sphere radius="0.19" scale="1 1.35 1" shadow="cast: true"
+        material="color:#ffcba4; roughness:0.04; metalness:0.10;
+                  emissive:#e89060; emissiveIntensity:0.14"></a-sphere>
+      <a-torus radius="0.165" radius-tubular="0.012" rotation="90 0 0"
+        material="color:#fff; opacity:0.45; transparent:true"></a-torus>
+      <a-torus radius="0.165" radius-tubular="0.012" rotation="0 0 0"
+        material="color:#ffb3c6; opacity:0.45; transparent:true"></a-torus>
+      <a-sphere radius="0.065" position="-0.07 0.14 0.13"
+        material="color:#fff; opacity:0.28; transparent:true; roughness:0"></a-sphere>
+    </a-entity></a-entity><!-- /egg-wrap5 -->
+
+  </a-entity><!-- /group-eggs -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: RABBITS
+       r1 walks in front, r2 sits on the right side
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-rabbits">
+
+    <!-- Rabbit 1 — walking left↔right in front of person -->
+    <a-entity id="r1-wrap"><a-entity id="r1-walk"
+      animation="property:position; from:-1.2 -1.06 -1.2; to:0.5 -1.06 -1.2;
+                 dur:8500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-entity animation="property:position; from:0 0 0; to:0 0.13 0;
+                           dur:520; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-sphere position="0 0.28 0" radius="0.23"
+          material="color:#f5f0eb; roughness:0.85; metalness:0"></a-sphere>
+        <a-sphere position="0 0.62 0.04" radius="0.17"
+          material="color:#f5f0eb; roughness:0.85; metalness:0"></a-sphere>
+        <!-- Ears -->
+        <a-entity position="-0.065 0.88 0.04">
+          <a-cylinder radius="0.034" height="0.32" material="color:#f0ebe4; roughness:0.9"></a-cylinder>
+          <a-cylinder radius="0.021" height="0.26" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+        </a-entity>
+        <a-entity position="0.065 0.88 0.04">
+          <a-cylinder radius="0.034" height="0.32" material="color:#f0ebe4; roughness:0.9"></a-cylinder>
+          <a-cylinder radius="0.021" height="0.26" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+        </a-entity>
+        <!-- Eyes — bleus -->
+        <a-sphere position="-0.070 0.648 0.148" radius="0.024" material="color:#1565c0; roughness:0.1; metalness:0.2"></a-sphere>
+        <a-sphere position=" 0.070 0.648 0.148" radius="0.024" material="color:#1565c0; roughness:0.1; metalness:0.2"></a-sphere>
+        <!-- Iris clair -->
+        <a-sphere position="-0.070 0.648 0.165" radius="0.012" material="color:#42a5f5; roughness:0; metalness:0.1"></a-sphere>
+        <a-sphere position=" 0.070 0.648 0.165" radius="0.012" material="color:#42a5f5; roughness:0; metalness:0.1"></a-sphere>
+        <!-- Reflet -->
+        <a-sphere position="-0.062 0.654 0.170" radius="0.005" material="color:#fff; roughness:0"></a-sphere>
+        <a-sphere position=" 0.078 0.654 0.170" radius="0.005" material="color:#fff; roughness:0"></a-sphere>
+        <!-- Museau -->
+        <a-sphere position="0 0.596 0.174" radius="0.034" scale="1.25 0.78 0.60" material="color:#f0ebe4; roughness:0.9"></a-sphere>
+        <!-- Nose -->
+        <a-sphere position="0 0.610 0.174" radius="0.013" material="color:#d81b60; roughness:0.6; emissive:#ad1457; emissiveIntensity:0.25"></a-sphere>
+        <!-- Babines — lobes roses + sillon central foncé -->
+        <a-sphere position="-0.017 0.587 0.178" radius="0.017" scale="1 0.65 0.55" material="color:#e8889a; roughness:0.8"></a-sphere>
+        <a-sphere position=" 0.017 0.587 0.178" radius="0.017" scale="1 0.65 0.55" material="color:#e8889a; roughness:0.8"></a-sphere>
+        <!-- Sillon entre les babines -->
+        <a-sphere position="0 0.583 0.180" radius="0.006" scale="0.5 1.2 0.6" material="color:#c2185b; roughness:0.8"></a-sphere>
+        <!-- Moustaches gauches -->
+        <a-cylinder radius="0.0022" height="0.10" position="-0.114 0.614 0.148" rotation="4 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <a-cylinder radius="0.0022" height="0.09" position="-0.112 0.605 0.152" rotation="1 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <a-cylinder radius="0.0022" height="0.08" position="-0.110 0.596 0.156" rotation="-3 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <!-- Moustaches droites -->
+        <a-cylinder radius="0.0022" height="0.10" position=" 0.114 0.614 0.148" rotation="4 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <a-cylinder radius="0.0022" height="0.09" position=" 0.112 0.605 0.152" rotation="1 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <a-cylinder radius="0.0022" height="0.08" position=" 0.110 0.596 0.156" rotation="-3 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+        <!-- Cheeks -->
+        <a-sphere position="-0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.40; transparent:true"></a-sphere>
+        <a-sphere position=" 0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.40; transparent:true"></a-sphere>
+        <!-- Tail -->
+        <a-sphere position="0 0.26 -0.22" radius="0.080" material="color:#fff; roughness:1"></a-sphere>
+        <!-- Paws -->
+        <a-sphere position="-0.108 0.10 0.118" radius="0.058" material="color:#f0ebe4; roughness:0.9"></a-sphere>
+        <a-sphere position=" 0.108 0.10 0.118" radius="0.058" material="color:#f0ebe4; roughness:0.9"></a-sphere>
+      </a-entity>
+    </a-entity></a-entity><!-- /r1-wrap -->
+
+    <!-- Rabbit 2 — sitting, right side of person -->
+    <a-entity id="r2-sit" position="1.5 -1.06 0"
+      animation="property:rotation; from:0 -20 0; to:0 20 0;
+                 dur:4500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-entity animation="property:position; from:0 0 0; to:0 0.04 0;
+                           dur:2200; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity scale="0.74 0.74 0.74">
+          <a-sphere position="0 0.28 0" radius="0.23" material="color:#e8e0d5; roughness:0.85; metalness:0"></a-sphere>
+          <a-sphere position="0 0.62 0.04" radius="0.17" material="color:#e8e0d5; roughness:0.85; metalness:0"></a-sphere>
+          <a-entity position="-0.065 0.88 0.04">
+            <a-cylinder radius="0.034" height="0.30" material="color:#ddd5c8; roughness:0.9"></a-cylinder>
+            <a-cylinder radius="0.021" height="0.24" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+          </a-entity>
+          <a-entity position="0.065 0.88 0.04">
+            <a-cylinder radius="0.034" height="0.30" material="color:#ddd5c8; roughness:0.9"></a-cylinder>
+            <a-cylinder radius="0.021" height="0.24" position="0 0 0.012" material="color:#f9c8d0; roughness:0.9"></a-cylinder>
+          </a-entity>
+          <!-- Eyes — bleus -->
+          <a-sphere position="-0.070 0.648 0.148" radius="0.024" material="color:#1565c0; roughness:0.1; metalness:0.2"></a-sphere>
+          <a-sphere position=" 0.070 0.648 0.148" radius="0.024" material="color:#1565c0; roughness:0.1; metalness:0.2"></a-sphere>
+          <a-sphere position="-0.070 0.648 0.165" radius="0.012" material="color:#42a5f5; roughness:0; metalness:0.1"></a-sphere>
+          <a-sphere position=" 0.070 0.648 0.165" radius="0.012" material="color:#42a5f5; roughness:0; metalness:0.1"></a-sphere>
+          <a-sphere position="-0.062 0.654 0.170" radius="0.005" material="color:#fff; roughness:0"></a-sphere>
+          <a-sphere position=" 0.078 0.654 0.170" radius="0.005" material="color:#fff; roughness:0"></a-sphere>
+          <!-- Museau -->
+          <a-sphere position="0 0.596 0.174" radius="0.034" scale="1.25 0.78 0.60" material="color:#ddd5c8; roughness:0.9"></a-sphere>
+          <!-- Nose -->
+          <a-sphere position="0 0.610 0.174" radius="0.013" material="color:#d81b60; roughness:0.6; emissive:#ad1457; emissiveIntensity:0.25"></a-sphere>
+          <!-- Babines — lobes roses + sillon central foncé -->
+          <a-sphere position="-0.017 0.587 0.178" radius="0.017" scale="1 0.65 0.55" material="color:#e8889a; roughness:0.8"></a-sphere>
+          <a-sphere position=" 0.017 0.587 0.178" radius="0.017" scale="1 0.65 0.55" material="color:#e8889a; roughness:0.8"></a-sphere>
+          <!-- Sillon entre les babines -->
+          <a-sphere position="0 0.583 0.180" radius="0.006" scale="0.5 1.2 0.6" material="color:#c2185b; roughness:0.8"></a-sphere>
+          <!-- Moustaches gauches -->
+          <a-cylinder radius="0.0022" height="0.10" position="-0.114 0.614 0.148" rotation="4 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <a-cylinder radius="0.0022" height="0.09" position="-0.112 0.605 0.152" rotation="1 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <a-cylinder radius="0.0022" height="0.08" position="-0.110 0.596 0.156" rotation="-3 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <!-- Moustaches droites -->
+          <a-cylinder radius="0.0022" height="0.10" position=" 0.114 0.614 0.148" rotation="4 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <a-cylinder radius="0.0022" height="0.09" position=" 0.112 0.605 0.152" rotation="1 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <a-cylinder radius="0.0022" height="0.08" position=" 0.110 0.596 0.156" rotation="-3 0 90" material="color:#757575; roughness:0.6"></a-cylinder>
+          <!-- Cheeks -->
+          <a-sphere position="-0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.38; transparent:true"></a-sphere>
+          <a-sphere position=" 0.105 0.622 0.125" radius="0.042" material="color:#ffb3c6; opacity:0.38; transparent:true"></a-sphere>
+          <a-sphere position="0 0.26 -0.22" radius="0.076" material="color:#f8f8f8; roughness:1"></a-sphere>
+        </a-entity>
+      </a-entity>
+    </a-entity>
+
+  </a-entity><!-- /group-rabbits -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: BUTTERFLIES — full 360° orbit around person
+       centerZ:0 so they circle the user, not just the front
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-butterflies">
+
+    <!-- Butterfly 1 — Pink/Lavender, mid orbit -->
+    <a-entity id="bf1" butterfly-orbit="radius:1.10; speed:0.50; height:1.45; phase:0; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-55; to:55;
+                           dur:360; loop:true; dir:alternate; easing:easeInOutSine">
+        <!-- Upper wings -->
+        <a-entity position="-0.155 0 0">
+          <a-sphere radius="0.145" scale="1 0.30 0.80"
+            material="color:#ff7eb5; opacity:0.90; transparent:true; side:double; emissive:#ff4090; emissiveIntensity:0.12"></a-sphere>
+          <!-- Wing spot -->
+          <a-sphere radius="0.038" position="-0.10 0.02 0"
+            material="color:#ff2060; opacity:0.70; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.155 0 0">
+          <a-sphere radius="0.145" scale="1 0.30 0.80"
+            material="color:#ffb3c6; opacity:0.90; transparent:true; side:double; emissive:#ff8090; emissiveIntensity:0.10"></a-sphere>
+          <a-sphere radius="0.038" position="0.10 0.02 0"
+            material="color:#ff2060; opacity:0.70; transparent:true"></a-sphere>
+        </a-entity>
+        <!-- Lower wings -->
+        <a-entity position="-0.115 -0.090 0">
+          <a-sphere radius="0.090" scale="1 0.38 0.85"
+            material="color:#c8a2c8; opacity:0.84; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.115 -0.090 0">
+          <a-sphere radius="0.090" scale="1 0.38 0.85"
+            material="color:#c8a2c8; opacity:0.84; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <!-- Body -->
+        <a-cylinder radius="0.018" height="0.22" rotation="90 0 0"
+          material="color:#3d1f00; roughness:0.6; metalness:0.15"></a-cylinder>
+        <!-- Antennae -->
+        <a-cylinder radius="0.006" height="0.13" position="-0.026 0.11 0" rotation="0 0 -22"
+          material="color:#3d1f00"></a-cylinder>
+        <a-cylinder radius="0.006" height="0.13" position="0.026 0.11 0" rotation="0 0 22"
+          material="color:#3d1f00"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+    <!-- Butterfly 2 — Sky Blue, tighter faster orbit -->
+    <a-entity id="bf2" butterfly-orbit="radius:0.80; speed:0.75; height:1.75; phase:2.1; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-50; to:50;
+                           dur:310; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity position="-0.130 0 0">
+          <a-sphere radius="0.120" scale="1 0.30 0.80"
+            material="color:#80c8ff; opacity:0.90; transparent:true; side:double; emissive:#2090ff; emissiveIntensity:0.12"></a-sphere>
+          <a-sphere radius="0.032" position="-0.085 0.02 0"
+            material="color:#0060e0; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.130 0 0">
+          <a-sphere radius="0.120" scale="1 0.30 0.80"
+            material="color:#87ceeb; opacity:0.90; transparent:true; side:double; emissive:#2090ff; emissiveIntensity:0.10"></a-sphere>
+          <a-sphere radius="0.032" position="0.085 0.02 0"
+            material="color:#0060e0; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="-0.098 -0.078 0">
+          <a-sphere radius="0.075" scale="1 0.38 0.85"
+            material="color:#a0d8ef; opacity:0.82; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.098 -0.078 0">
+          <a-sphere radius="0.075" scale="1 0.38 0.85"
+            material="color:#a0d8ef; opacity:0.82; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-cylinder radius="0.016" height="0.19" rotation="90 0 0"
+          material="color:#1a1033; roughness:0.6; metalness:0.15"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+    <!-- Butterfly 3 — Warm Yellow, wide slow orbit -->
+    <a-entity id="bf3" butterfly-orbit="radius:1.50; speed:0.38; height:1.15; phase:4.2; centerZ:0">
+      <a-entity animation="property:rotation.y; from:-58; to:58;
+                           dur:420; loop:true; dir:alternate; easing:easeInOutSine">
+        <a-entity position="-0.140 0 0">
+          <a-sphere radius="0.132" scale="1 0.30 0.80"
+            material="color:#ffe033; opacity:0.92; transparent:true; side:double; emissive:#e0a000; emissiveIntensity:0.14"></a-sphere>
+          <a-sphere radius="0.036" position="-0.09 0.02 0"
+            material="color:#e06000; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="0.140 0 0">
+          <a-sphere radius="0.132" scale="1 0.30 0.80"
+            material="color:#ffee58; opacity:0.92; transparent:true; side:double; emissive:#e0a000; emissiveIntensity:0.12"></a-sphere>
+          <a-sphere radius="0.036" position="0.09 0.02 0"
+            material="color:#e06000; opacity:0.65; transparent:true"></a-sphere>
+        </a-entity>
+        <a-entity position="-0.105 -0.082 0">
+          <a-sphere radius="0.082" scale="1 0.38 0.85"
+            material="color:#f9a825; opacity:0.80; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-entity position="0.105 -0.082 0">
+          <a-sphere radius="0.082" scale="1 0.38 0.85"
+            material="color:#f9a825; opacity:0.80; transparent:true; side:double"></a-sphere>
+        </a-entity>
+        <a-cylinder radius="0.017" height="0.20" rotation="90 0 0"
+          material="color:#4a1a00; roughness:0.6; metalness:0.15"></a-cylinder>
+      </a-entity>
+    </a-entity>
+
+  </a-entity><!-- /group-butterflies -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       GROUP: SPRING FLOWERS — distributed 360° at ground
+  ═════════════════════════════════════════════════════════ -->
+  <a-entity id="group-flowers">
+
+    <!-- Flower A — Pink daisy | front-right ~40°, 2.0m -->
+    <a-entity id="flower-a" position="0.78 -1.04 -0.93"
+      animation="property:rotation.z; from:-6; to:6;
+                 dur:2800; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.065" material="color:#fff176; emissive:#f0d000; emissiveIntensity:0.35"></a-sphere>
+      <a-sphere position=" 0.000  0.085 0" radius="0.045" scale="1.7 0.85 1" material="color:#ff90b8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.085 0" radius="0.045" scale="1.7 0.85 1" material="color:#ff6ea0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.085  0.000 0" radius="0.045" scale="0.85 1.7 1" material="color:#ffa0c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.085  0.000 0" radius="0.045" scale="0.85 1.7 1" material="color:#ffa0c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.062  0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ffb3c6; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.062  0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ffb3c6; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.062 -0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ff90b8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.062 -0.062 0" radius="0.038" scale="1.4 1.4 0.8" material="color:#ff90b8; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.010" height="0.24" position="0 -0.12 0" material="color:#4caf50"></a-cylinder>
+    </a-entity>
+
+    <!-- Flower B — Lavender | behind-right ~160°, 2.3m -->
+    <a-entity id="flower-b" position="0.48 -1.04 1.31"
+      animation="property:rotation.z; from:5; to:-5;
+                 dur:3200; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.058" material="color:#fff176; emissive:#f0d000; emissiveIntensity:0.30"></a-sphere>
+      <a-sphere position=" 0.000  0.075 0" radius="0.040" scale="1.7 0.85 1" material="color:#c8a2c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.075 0" radius="0.040" scale="1.7 0.85 1" material="color:#c8a2c8; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.075  0.000 0" radius="0.040" scale="0.85 1.7 1" material="color:#b088b0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.075  0.000 0" radius="0.040" scale="0.85 1.7 1" material="color:#b088b0; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.055  0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#d8b8d8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.055  0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#d8b8d8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.055 -0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#c898c8; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.055 -0.055 0" radius="0.034" scale="1.4 1.4 0.8" material="color:#c898c8; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.009" height="0.22" position="0 -0.11 0" material="color:#388e3c"></a-cylinder>
+    </a-entity>
+
+    <!-- Flower C — Blue | left ~270°, 2.5m -->
+    <a-entity id="flower-c" position="-1.50 -1.04 0.0"
+      animation="property:rotation.z; from:-4; to:7;
+                 dur:2500; loop:true; dir:alternate; easing:easeInOutSine">
+      <a-sphere radius="0.060" material="color:#fff; emissive:#e8f8ff; emissiveIntensity:0.25"></a-sphere>
+      <a-sphere position=" 0.000  0.078 0" radius="0.043" scale="1.7 0.85 1" material="color:#87ceeb; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.000 -0.078 0" radius="0.043" scale="1.7 0.85 1" material="color:#87ceeb; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.078  0.000 0" radius="0.043" scale="0.85 1.7 1" material="color:#b3e0ff; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position="-0.078  0.000 0" radius="0.043" scale="0.85 1.7 1" material="color:#b3e0ff; opacity:0.94; transparent:true"></a-sphere>
+      <a-sphere position=" 0.057  0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.057  0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position=" 0.057 -0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-sphere position="-0.057 -0.057 0" radius="0.036" scale="1.4 1.4 0.8" material="color:#a0d8f0; opacity:0.88; transparent:true"></a-sphere>
+      <a-cylinder radius="0.009" height="0.26" position="0 -0.13 0" material="color:#4caf50"></a-cylinder>
+    </a-entity>
+
+  </a-entity><!-- /group-flowers -->
+
+
+  <!-- Pollen + Grass injected via JS components -->
+  <a-entity id="pollen-root" pollen-system="count:28"></a-entity>
+  <a-entity id="grass-root"  grass-ring="radius:1.8; count:32"></a-entity>
+
+
+  <!-- Camera — look-controls for gyroscope AR -->
+  <a-camera id="ar-cam" position="0 0 0"
+    camera="fov: 80"
+    look-controls="enabled:true; reverseMouseDrag:false"
+    wasd-controls="enabled:false">
+  </a-camera>
+
+</a-scene>
+
+<!-- Bottom UI bar -->
+<div id="ui-bar">
+  <button class="ui-btn" id="flip-btn"         onclick="flipCamera()"   title="Flip camera">🔄</button>
+  <button class="ui-btn" id="photo-btn"         onclick="takePhoto()">📸 Take Photo</button>
+  <button class="ui-btn" id="picker-toggle-btn" onclick="togglePicker()" title="Elements">🎨</button>
+</div>
+
+
+<script>
+'use strict';
+
+// ── Butterfly orbit — full 360° around person ─────────────────────
+AFRAME.registerComponent('butterfly-orbit', {
+  schema: {
+    radius:  { default: 1.8  },
+    speed:   { default: 0.5  },
+    height:  { default: 1.5  },
+    phase:   { default: 0.0  },
+    centerX: { default: 0.0  },  // orbit center X (décalage par drag)
+    centerZ: { default: 0.0  },  // orbit center Z (0 = around person)
+    offsetY: { default: 0.0  }   // extra lift for selfie mode
+  },
+  init() { this.angle = this.data.phase; },
+  tick(time, delta) {
+    this.angle += (delta / 1000) * this.data.speed;
+    const a = this.angle;
+    const x = Math.cos(a) * this.data.radius + this.data.centerX;
+    const z = Math.sin(a) * this.data.radius + this.data.centerZ;
+    const y = this.data.height + this.data.offsetY + Math.sin(a * 1.8) * 0.16;
+    this.el.object3D.position.set(x, y, z);
+    this.el.object3D.rotation.y = -(a - Math.PI / 2);
+  }
+});
+
+// ── Pollen — 360° around person ───────────────────────────────────
+AFRAME.registerComponent('pollen-system', {
+  schema: { count: { default: 28 } },
+  init() {
+    const palette = ['#fffde7','#fff9c4','#fffacd','#f0fff0','#fff0f5','#fef9e7','#ffe8f5'];
+    for (let i = 0; i < this.data.count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r     = 0.8 + Math.random() * 3.5;
+      const x     = Math.cos(angle) * r;
+      const z     = Math.sin(angle) * r;
+      const y     = Math.random() * 3.5;
+      const endR  = r + (Math.random() - 0.5) * 1.2;
+      const endX  = Math.cos(angle + 0.3) * endR;
+      const sz    = 0.013 + Math.random() * 0.022;
+      const dur   = 5000 + Math.random() * 7000;
+      const col   = palette[Math.floor(Math.random() * palette.length)];
+      const op    = 0.35 + Math.random() * 0.50;
+
+      const p = document.createElement('a-sphere');
+      p.setAttribute('radius', sz);
+      p.setAttribute('material', `color:${col}; opacity:${op}; transparent:true; roughness:0.2`);
+      p.setAttribute('animation__float',
+        `property:position; from:${x} ${y} ${z}; to:${endX} ${y + 2.8} ${z + 0.3};
+         dur:${dur}; loop:true; easing:linear`);
+      p.setAttribute('animation__fade',
+        `property:components.material.material.opacity; from:${op}; to:0;
+         dur:${dur}; loop:true; easing:linear`);
+      this.el.appendChild(p);
+    }
+  }
+});
+
+// ── Grass ring — full circle around person ────────────────────────
+AFRAME.registerComponent('grass-ring', {
+  schema: { radius: { default: 2.8 }, count: { default: 32 } },
+  init() {
+    const greens = ['#4caf50','#388e3c','#66bb6a','#43a047','#558b2f','#7cb342','#2e7d32'];
+    for (let i = 0; i < this.data.count; i++) {
+      const angle = (i / this.data.count) * Math.PI * 2;
+      const r     = this.data.radius + (Math.random() - 0.5) * 1.0;
+      const x     = Math.cos(angle) * r;
+      const z     = Math.sin(angle) * r;
+      const h     = 0.06 + Math.random() * 0.10;
+      const col   = greens[Math.floor(Math.random() * greens.length)];
+      const lean  = (Math.random() - 0.5) * 24;
+      const dur   = 1400 + Math.random() * 1600;
+
+      const blade = document.createElement('a-cylinder');
+      blade.setAttribute('position', `${x} ${-1.06 + h / 2} ${z}`);
+      blade.setAttribute('radius',   '0.018');
+      blade.setAttribute('height',   h);
+      blade.setAttribute('rotation', `0 ${Math.random() * 360} ${lean}`);
+      blade.setAttribute('material', `color:${col}; roughness:1`);
+      blade.setAttribute('animation',
+        `property:rotation; from:0 0 ${lean}; to:0 0 ${lean + 10};
+         dur:${dur}; loop:true; dir:alternate; easing:easeInOutSine`);
+      this.el.appendChild(blade);
+    }
+  }
+});
+
+
+// ── Selfie layout — push front eggs higher/aside ──────────────────
+const EGG_POSITIONS = {
+  normal: [
+    { id:'egg1', from: '0.37 0.16 -1.38', to: '0.37 0.48 -1.38', dur:3200 },
+    { id:'egg2', from: '1.50 0.46  0.27', to: '1.50 0.78  0.27', dur:3900 },
+    { id:'egg3', from:'-0.30 0.11  1.68', to:'-0.30 0.42  1.68', dur:2700 },
+    { id:'egg4', from:'-1.38 0.56  0.25', to:'-1.38 0.88  0.25', dur:4400 },
+    { id:'egg5', from:'-0.57 0.31 -1.22', to:'-0.57 0.63 -1.22', dur:3500 }
+  ],
+  selfie: [
+    { id:'egg1', from: '1.50 1.31 -1.50', to: '1.50 1.61 -1.50', dur:3200 },
+    { id:'egg2', from: '1.50 0.46  0.27', to: '1.50 0.78  0.27', dur:3900 },
+    { id:'egg3', from:'-0.30 0.11  1.68', to:'-0.30 0.42  1.68', dur:2700 },
+    { id:'egg4', from:'-1.38 0.56  0.25', to:'-1.38 0.88  0.25', dur:4400 },
+    { id:'egg5', from:'-1.50 1.31 -1.50', to:'-1.50 1.61 -1.50', dur:3500 }
+  ]
+};
+
+function setSelfieLayout(isSelfie) {
+  const layout = isSelfie ? 'selfie' : 'normal';
+  EGG_POSITIONS[layout].forEach(({ id, from, to, dur }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('animation',
+      `property:position; from:${from}; to:${to}; dur:${dur}; loop:true; dir:alternate; easing:easeInOutSine`);
+  });
+
+  const bfOffsetY = isSelfie ? 0.9 : 0;
+  ['bf1','bf2','bf3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.components['butterfly-orbit'])
+      el.setAttribute('butterfly-orbit', 'offsetY', bfOffsetY);
+  });
+
+  document.getElementById('selfie-badge').classList.toggle('visible', isSelfie);
+}
+
+
+// ── Camera stream ─────────────────────────────────────────────────
+let stream = null;
+let facingMode = 'environment';
+
+async function startCameraStream() {
+  const video = document.getElementById('ar-camera');
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    return true;
+  } catch (err) {
+    console.warn('Camera unavailable:', err.message);
+    document.body.style.background = 'linear-gradient(160deg, #0d1b2a 0%, #1a0a2e 50%, #0d1b2a 100%)';
+    return false;
+  }
+}
+
+async function flipCamera() {
+  const btn = document.getElementById('flip-btn');
+  btn.disabled = true;
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  const video = document.getElementById('ar-camera');
+  video.style.transform = 'scaleX(1)';
+  setSelfieLayout(facingMode === 'user');
+  await startCameraStream();
+  btn.disabled = false;
+}
+
+// ── Permission → start ────────────────────────────────────────────
+async function requestCameraAndStart() {
+  const permScreen = document.getElementById('permission-screen');
+  const loadScreen = document.getElementById('loading-screen');
+  permScreen.classList.add('hidden');
+  loadScreen.style.display = 'flex';
+  await startCameraStream();
+  const scene = document.getElementById('ar-scene');
+  const onLoaded = () => {
+    setTimeout(() => {
+      loadScreen.classList.add('fade-out');
+      setTimeout(() => { loadScreen.style.display = 'none'; }, 950);
+    }, 600);
+  };
+  if (scene.hasLoaded) onLoaded();
+  else scene.addEventListener('loaded', onLoaded, { once: true });
+}
+
+
+// ── Element picker ────────────────────────────────────────────────
+const groupVisible = {
+  'group-eggs': true, 'group-rabbits': true, 'group-butterflies': true,
+  'group-flowers': true, 'pollen-root': true, 'grass-root': true
+};
+let pickerOpen = false;
+
+function togglePicker() {
+  pickerOpen = !pickerOpen;
+  document.getElementById('picker-panel').classList.toggle('open', pickerOpen);
+}
+
+function toggleGroup(groupId, btnId) {
+  groupVisible[groupId] = !groupVisible[groupId];
+  const el = document.getElementById(groupId);
+  if (el) el.setAttribute('visible', groupVisible[groupId]);
+  document.getElementById(btnId).classList.toggle('off', !groupVisible[groupId]);
+}
+
+document.addEventListener('click', (e) => {
+  if (!pickerOpen) return;
+  const panel = document.getElementById('picker-panel');
+  const btn   = document.getElementById('picker-toggle-btn');
+  if (!panel.contains(e.target) && e.target !== btn) {
+    pickerOpen = false;
+    panel.classList.remove('open');
+  }
+});
+
+
+// ── Photo capture ─────────────────────────────────────────────────
+function takePhoto() {
+  const btn = document.getElementById('photo-btn');
+  btn.disabled = true;
+
+  requestAnimationFrame(() => {
+    const video = document.getElementById('ar-camera');
+    const scene = document.getElementById('ar-scene');
+
+    // Force render into WebGL canvas before reading it
+    if (scene && scene.renderer && scene.object3D && scene.camera) {
+      try { scene.renderer.render(scene.object3D, scene.camera); } catch(e) {}
+    }
+
+    const arCanvas = scene ? (scene.canvas || scene.querySelector('canvas')) : null;
+    const dpr = window.devicePixelRatio || 1;
+    const W   = Math.floor(window.innerWidth  * dpr);
+    const H   = Math.floor(window.innerHeight * dpr);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    if (video && video.readyState >= 2) {
+      const vW = video.videoWidth  || W;
+      const vH = video.videoHeight || H;
+      const scale = Math.max(W / vW, H / vH);
+      const drawW = vW * scale, drawH = vH * scale;
+      ctx.drawImage(video, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
+    } else {
+      ctx.fillStyle = '#0d1b2a';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    if (arCanvas && arCanvas.width > 0) {
+      try { ctx.drawImage(arCanvas, 0, 0, W, H); } catch(e) {}
+    }
+
+    const flash = document.getElementById('flash');
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+
+    try {
+      canvas.toBlob(blob => {
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `easter-magic-${Date.now()}.png`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+        showToast('📸 Photo saved to your device!');
+      }, 'image/png');
+    } catch(e) {
+      showToast('Try a screenshot instead 🙏');
+    }
+
+    setTimeout(() => { btn.disabled = false; }, 1600);
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── Œufs logo supplémentaires ────────────────────────────────────
+// Les œufs originaux restent intacts. De nouveaux œufs apparaissent.
+
+// Positions des œufs logo (5 emplacements différents des originaux)
+const LOGO_EGG_SLOTS = [
+  { pos: [ 0.55,  0.22, -1.05], dur: 2600, radius: 0.20 },
+  { pos: [-0.75,  0.40,  1.05], dur: 3100, radius: 0.22 },
+  { pos: [ 1.35,  0.50,  0.40], dur: 3700, radius: 0.18 },
+  { pos: [-1.20,  0.32, -0.50], dur: 2900, radius: 0.21 },
+  { pos: [ 0.10,  0.15,  1.60], dur: 4100, radius: 0.19 },
+];
+
+// Configs logo — remplacer svg par une URL d'image quand les logos seront fournis
+// Format: { imageUrl: 'chemin/vers/logo.png' } OU { svg: '<svg>...</svg>' }
+const LOGO_CONFIGS = {
+  trimane: {
+    imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAeAB4AAD/4QL4RXhpZgAATU0AKgAAAAgABAE7AAIAAAAPAAABSodpAAQAAAABAAABWpydAAEAAAAeAAAC0uocAAcAAAEMAAAAPgAAAAAc6gAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARGVscGhpbmUgQkVSVEUAAAAFkAMAAgAAABQAAAKokAQAAgAAABQAAAK8kpEAAgAAAAMyNgAAkpIAAgAAAAMyNgAA6hwABwAAAQwAAAGcAAAAABzqAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAyMDI2OjAzOjIxIDAwOjU1OjU2ADIwMjY6MDM6MjEgMDA6NTU6NTYAAABEAGUAbABwAGgAaQBuAGUAIABCAEUAUgBUAEUAAAD/4QQhaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQgYmVnaW49J++7vycgaWQ9J1c1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCc/Pg0KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+PHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj48cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0idXVpZDpmYWY1YmRkNS1iYTNkLTExZGEtYWQzMS1kMzNkNzUxODJmMWIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIvPjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSJ1dWlkOmZhZjViZGQ1LWJhM2QtMTFkYS1hZDMxLWQzM2Q3NTE4MmYxYiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIj48eG1wOkNyZWF0ZURhdGU+MjAyNi0wMy0yMVQwMDo1NTo1Ni4yNjI8L3htcDpDcmVhdGVEYXRlPjwvcmRmOkRlc2NyaXB0aW9uPjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSJ1dWlkOmZhZjViZGQ1LWJhM2QtMTFkYS1hZDMxLWQzM2Q3NTE4MmYxYiIgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIj48ZGM6Y3JlYXRvcj48cmRmOlNlcSB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPjxyZGY6bGk+RGVscGhpbmUgQkVSVEU8L3JkZjpsaT48L3JkZjpTZXE+DQoJCQk8L2RjOmNyZWF0b3I+PC9yZGY6RGVzY3JpcHRpb24+PC9yZGY6UkRGPjwveDp4bXBtZXRhPg0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg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',
+    roughness: 0.10, metalness: 0.04
+  },
+  iorga: {
+    imageUrl: 'data:image/png;base64,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',
+    roughness: 0.10, metalness: 0.04
+  },
+  capitalb: {
+    imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAeAB4AAD/4QL4RXhpZgAATU0AKgAAAAgABAE7AAIAAAAPAAABSodpAAQAAAABAAABWpydAAEAAAAeAAAC0uocAAcAAAEMAAAAPgAAAAAc6gAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARGVscGhpbmUgQkVSVEUAAAAFkAMAAgAAABQAAAKokAQAAgAAABQAAAK8kpEAAgAAAAM5MAAAkpIAAgAAAAM5MAAA6hwABwAAAQwAAAGcAAAAABzqAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAyMDI2OjAzOjIxIDAwOjU2OjU4ADIwMjY6MDM6MjEgMDA6NTY6NTgAAABEAGUAbABwAGgAaQBuAGUAIABCAEUAUgBUAEUAAAD/4QQhaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQgYmVnaW49J++7vycgaWQ9J1c1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCc/Pg0KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+PHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj48cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0idXVpZDpmYWY1YmRkNS1iYTNkLTExZGEtYWQzMS1kMzNkNzUxODJmMWIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIvPjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSJ1dWlkOmZhZjViZGQ1LWJhM2QtMTFkYS1hZDMxLWQzM2Q3NTE4MmYxYiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIj48eG1wOkNyZWF0ZURhdGU+MjAyNi0wMy0yMVQwMDo1Njo1OC44OTY8L3htcDpDcmVhdGVEYXRlPjwvcmRmOkRlc2NyaXB0aW9uPjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSJ1dWlkOmZhZjViZGQ1LWJhM2QtMTFkYS1hZDMxLWQzM2Q3NTE4MmYxYiIgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIj48ZGM6Y3JlYXRvcj48cmRmOlNlcSB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPjxyZGY6bGk+RGVscGhpbmUgQkVSVEU8L3JkZjpsaT48L3JkZjpTZXE+DQoJCQk8L2RjOmNyZWF0b3I+PC9yZGY6RGVzY3JpcHRpb24+PC9yZGY6UkRGPjwveDp4bXBtZXRhPg0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg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',
+    roughness: 0.10, metalness: 0.04,
+    tileCount: 4
+  },
+  xdev: {
+    // imageUrl: 'logos/xdev.png',     // ← logo à venir
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">
+      <defs>
+        <pattern id="p" x="0" y="0" width="150" height="70" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)">
+          <rect width="150" height="70" fill="#1a1a2e"/>
+          <rect x="0" y="68" width="150" height="2" fill="#7c4dff"/>
+          <text x="8" y="48" font-family="Arial,sans-serif" font-weight="900" font-size="30" letter-spacing="3" fill="rgba(255,255,255,0.92)">XDEV</text>
+        </pattern>
+      </defs>
+      <rect width="512" height="512" fill="url(#p)"/>
+    </svg>`,
+    roughness: 0.20, metalness: 0.06
+  }
+};
+
+let _logoEggEls = []; // œufs logo actuellement dans la scène
+
+function makeSVGCanvas(svgStr) {
+  return new Promise(resolve => {
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const blobUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
+      URL.revokeObjectURL(blobUrl);
+      resolve(c.toDataURL());
+    };
+    img.src = blobUrl;
+  });
+}
+
+function makeTiledCanvas(imageUrl, tileCount) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      const ctx = c.getContext('2d');
+      // Fond blanc léger
+      ctx.fillStyle = '#fff8f0';
+      ctx.fillRect(0, 0, 512, 512);
+      const n = tileCount;
+      const cell = 512 / n;
+      const padding = cell * 0.08;
+      for (let row = 0; row < n; row++) {
+        for (let col = 0; col < n; col++) {
+          ctx.drawImage(img,
+            col * cell + padding,
+            row * cell + padding,
+            cell - padding * 2,
+            cell - padding * 2
+          );
+        }
+      }
+      resolve(c.toDataURL());
+    };
+    img.src = imageUrl;
+  });
+}
+
+function removeLogoEggs() {
+  _logoEggEls.forEach((el, i) => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+    // Retirer de DRAGGABLE
+    if (window.DRAGGABLE) {
+      const wrapId = `logo-egg-wrap-${i}`;
+      const idx = window.DRAGGABLE.findIndex(d => d.id === wrapId);
+      if (idx !== -1) window.DRAGGABLE.splice(idx, 1);
+    }
+  });
+  _logoEggEls = [];
+}
+
+async function spawnLogoEggs(cfg) {
+  const sceneEl = document.getElementById('ar-scene');
+
+  // Obtenir la dataURL de la texture
+  let dataURL;
+  if (cfg.imageUrl && cfg.tileCount) {
+    dataURL = await makeTiledCanvas(cfg.imageUrl, cfg.tileCount);
+  } else if (cfg.imageUrl) {
+    dataURL = cfg.imageUrl; // image réelle fournie
+  } else {
+    dataURL = await makeSVGCanvas(cfg.svg);
+  }
+
+  LOGO_EGG_SLOTS.forEach((slot, i) => {
+    const [x, y, z] = slot.pos;
+    const bounce = 0.32;
+    const r = slot.radius || 0.20;
+    const wrapper = document.createElement('a-entity');
+
+    const egg = document.createElement('a-entity');
+    egg.setAttribute('position', `${x} ${y} ${z}`);
+    egg.setAttribute('animation', [
+      `property:position`,
+      `from:${x} ${y} ${z}`,
+      `to:${x} ${y + bounce} ${z}`,
+      `dur:${slot.dur}`,
+      `loop:true; dir:alternate; easing:easeInOutSine`
+    ].join('; '));
+    egg.setAttribute('animation__spin',
+      `property:rotation; from:0 0 0; to:0 360 0; dur:${9000 + i * 1500}; loop:true; easing:linear`);
+
+    // Sphère principale avec texture logo
+    const sphere = document.createElement('a-sphere');
+    sphere.setAttribute('radius', String(r));
+    sphere.setAttribute('scale', '1 1.35 1');
+    sphere.setAttribute('shadow', 'cast: true');
+    sphere.setAttribute('material', {
+      src: dataURL,
+      color: '#ffffff',
+      roughness: cfg.roughness,
+      metalness: cfg.metalness
+    });
+    egg.appendChild(sphere);
+
+    // Torus décoratif (comme les œufs originaux)
+    const torus = document.createElement('a-torus');
+    torus.setAttribute('radius', String(r * 0.92));
+    torus.setAttribute('radius-tubular', String(r * 0.058));
+    torus.setAttribute('rotation', '90 0 0');
+    torus.setAttribute('material', 'color:#fff; opacity:0.55; transparent:true; roughness:0');
+    egg.appendChild(torus);
+
+    // Reflet principal
+    const shine = document.createElement('a-sphere');
+    shine.setAttribute('radius', String(r * 0.34));
+    shine.setAttribute('position', `-0.07 ${(r * 0.65).toFixed(2)} 0.14`);
+    shine.setAttribute('material', 'color:#fff; opacity:0.30; transparent:true; roughness:0');
+    egg.appendChild(shine);
+
+    // Reflet secondaire
+    const shine2 = document.createElement('a-sphere');
+    shine2.setAttribute('radius', String(r * 0.16));
+    shine2.setAttribute('position', `0.06 -${(r * 0.40).toFixed(2)} 0.17`);
+    shine2.setAttribute('material', 'color:#fff; opacity:0.20; transparent:true; roughness:0');
+    egg.appendChild(shine2);
+
+    wrapper.appendChild(egg);
+    // Donner un ID unique et enregistrer dans DRAGGABLE pour le drag
+    const wrapId = `logo-egg-wrap-${i}`;
+    wrapper.id = wrapId;
+    sceneEl.appendChild(wrapper);
+    _logoEggEls.push(wrapper);
+    if (window.DRAGGABLE) {
+      // Retirer l'éventuelle entrée précédente avec ce même ID
+      const idx = window.DRAGGABLE.findIndex(d => d.id === wrapId);
+      if (idx !== -1) window.DRAGGABLE.splice(idx, 1);
+      window.DRAGGABLE.push({ id: wrapId, group: 'eggs' });
+    }
+  });
+}
+
+function setEggLogo(name) {
+  document.querySelectorAll('.logo-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.logo === name);
+  });
+
+  removeLogoEggs();
+
+  if (name !== 'none' && LOGO_CONFIGS[name]) {
+    spawnLogoEggs(LOGO_CONFIGS[name]);
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+});
+
+
+// ══════════════════════════════════════════════════════════════════
+//  DRAG & DROP — déplacer chaque élément individuellement
+// ══════════════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+
+  // IDs draggables — les œufs et r1 utilisent des wrappers (pas de conflit animation)
+  const DRAGGABLE = [
+    { id: 'egg-wrap1',  group: 'eggs' },
+    { id: 'egg-wrap2',  group: 'eggs' },
+    { id: 'egg-wrap3',  group: 'eggs' },
+    { id: 'egg-wrap4',  group: 'eggs' },
+    { id: 'egg-wrap5',  group: 'eggs' },
+    { id: 'r1-wrap',    group: 'rabbits' },
+    { id: 'r2-sit',     group: 'rabbits' },
+    { id: 'bf1',        group: 'butterflies' },
+    { id: 'bf2',        group: 'butterflies' },
+    { id: 'bf3',        group: 'butterflies' },
+    { id: 'flower-a',   group: 'flowers' },
+    { id: 'flower-b',   group: 'flowers' },
+    { id: 'flower-c',   group: 'flowers' },
+  ];
+  window.DRAGGABLE = DRAGGABLE; // exposé pour les œufs logo dynamiques
+
+  const GROUND_Y = -1.10;
+  const sceneEl  = document.getElementById('ar-scene');
+  const T3       = (typeof THREE !== 'undefined') ? THREE : AFRAME.THREE;
+
+  // ── Raycaster ─────────────────────────────────────────────────────
+  const _rc  = new T3.Raycaster();
+  const _ndc = new T3.Vector2();
+  _rc.far = 50;
+
+  function getCam3D() {
+    // Mettre à jour tout le graphe de scène depuis la racine
+    sceneEl.object3D.updateMatrixWorld(true);
+    return document.getElementById('ar-cam').getObject3D('camera');
+  }
+
+  function setNDC(clientX, clientY) {
+    _ndc.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  }
+
+  function worldAtDepth(clientX, clientY, depth) {
+    setNDC(clientX, clientY);
+    _rc.setFromCamera(_ndc, getCam3D());
+    return _rc.ray.origin.clone().addScaledVector(_rc.ray.direction, depth);
+  }
+
+  function findHitElement(clientX, clientY) {
+    const cam = getCam3D();
+    if (!cam) return null;
+
+    // ── Méthode 1 : raycasting Three.js ──────────────────────────────
+    setNDC(clientX, clientY);
+    _rc.setFromCamera(_ndc, cam);
+    for (let i = 0; i < DRAGGABLE.length; i++) {
+      const info = DRAGGABLE[i];
+      const el   = document.getElementById(info.id);
+      if (!el || !el.object3D) continue;
+      const hits = _rc.intersectObject(el.object3D, true);
+      if (hits.length > 0) {
+        return { el, group: info.group, dist: Math.max(hits[0].distance, 0.4) };
+      }
+    }
+
+    // ── Méthode 2 : proximité écran (fallback, seuil 110 px) ─────────
+    const camPos = new T3.Vector3();
+    cam.getWorldPosition(camPos);
+    let best = null, bestD = 110;
+    for (let i = 0; i < DRAGGABLE.length; i++) {
+      const info = DRAGGABLE[i];
+      const el   = document.getElementById(info.id);
+      if (!el || !el.object3D) continue;
+      const wPos = new T3.Vector3();
+      el.object3D.getWorldPosition(wPos);
+      const proj = wPos.clone().project(cam);
+      if (proj.z >= 1) continue; // derrière la caméra
+      const sx = ( proj.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-proj.y * 0.5 + 0.5) * window.innerHeight;
+      const d  = Math.hypot(sx - clientX, sy - clientY);
+      if (d < bestD) {
+        bestD = d;
+        best  = { el, group: info.group, dist: Math.max(wPos.distanceTo(camPos), 0.4) };
+      }
+    }
+    return best;
+  }
+
+  // Œufs et r1 utilisent des wrappers → pas d'animation à gérer, déplacement direct
+
+  // ── Butterfly-orbit : pause pendant drag, recentre l'orbite au drop ─
+  function pauseOrbit(el) {
+    const comp = el.components && el.components['butterfly-orbit'];
+    if (comp) comp.pause();
+  }
+  function resumeOrbit(el, newPos) {
+    const comp = el.components && el.components['butterfly-orbit'];
+    if (!comp) return;
+    if (newPos) {
+      // Calcule le nouvel offset de centre pour que l'orbite reprenne
+      // depuis la position de drop (en conservant le rayon et l'angle courant)
+      const a  = comp.angle;
+      const cx = newPos.x - Math.cos(a) * comp.data.radius;
+      const cz = newPos.z - Math.sin(a) * comp.data.radius;
+      el.setAttribute('butterfly-orbit', 'centerX', cx);
+      el.setAttribute('butterfly-orbit', 'centerZ', cz);
+    }
+    comp.play();
+  }
+
+  // ── Drag state ────────────────────────────────────────────────────
+  const drag = {
+    active: false, el: null, group: null,
+    depth: 2, wOrigin: null, pOrigin: null
+  };
+  let pinchActive = false;
+
+  // ── Dirt-dome Easter egg ──────────────────────────────────────────
+  const DOME_DURATION = 10000;
+  let domeEl       = null;
+  let domeTimer    = null;
+  let buriedEl     = null; // lapin spécifique sous terre
+
+  function makeEar(xOff) {
+    const ear   = document.createElement('a-entity');
+    ear.setAttribute('position', `${xOff} 0.36 0.04`);
+    const outer = document.createElement('a-cylinder');
+    outer.setAttribute('radius', '0.034');
+    outer.setAttribute('height', '0.24');
+    outer.setAttribute('material', 'color:#f0ebe4; roughness:0.9');
+    const inner = document.createElement('a-cylinder');
+    inner.setAttribute('radius', '0.021');
+    inner.setAttribute('height', '0.18');
+    inner.setAttribute('position', '0 0 0.013');
+    inner.setAttribute('material', 'color:#f9c8d0; roughness:0.9');
+    ear.appendChild(outer);
+    ear.appendChild(inner);
+    return ear;
+  }
+
+  function showDome(x, z) {
+    hideDome(false);
+    domeEl = document.createElement('a-entity');
+    domeEl.id = 'dirt-dome';
+    domeEl.setAttribute('position', `${x} ${GROUND_Y} ${z}`);
+
+    const mound = document.createElement('a-sphere');
+    mound.setAttribute('radius',   '0.30');
+    mound.setAttribute('scale',    '0 0 0');
+    mound.setAttribute('position', '0 0.09 0');
+    mound.setAttribute('material', 'color:#7a5030; roughness:0.95; metalness:0');
+    mound.setAttribute('animation', 'property:scale; from:0 0 0; to:1 0.55 1; dur:500; easing:easeOutBack');
+    domeEl.appendChild(mound);
+
+    const ring = document.createElement('a-torus');
+    ring.setAttribute('radius', '0.27');
+    ring.setAttribute('radius-tubular', '0.04');
+    ring.setAttribute('rotation', '90 0 0');
+    ring.setAttribute('material', 'color:#4a3018; roughness:1');
+    domeEl.appendChild(ring);
+
+    domeEl.appendChild(makeEar(-0.065));
+    domeEl.appendChild(makeEar( 0.065));
+    sceneEl.appendChild(domeEl);
+  }
+
+  function hideDome(animate) {
+    clearTimeout(domeTimer);
+    if (!domeEl) return;
+    if (animate) {
+      const mound = domeEl.querySelector('a-sphere');
+      if (mound) mound.setAttribute('animation',
+        'property:scale; from:1 0.55 1; to:0 0 0; dur:600; easing:easeInBack');
+      const el = domeEl;
+      setTimeout(() => { if (el && el.parentNode) el.parentNode.removeChild(el); }, 700);
+    } else {
+      if (domeEl.parentNode) domeEl.parentNode.removeChild(domeEl);
+    }
+    domeEl = null;
+  }
+
+  function resetBuriedRabbit() {
+    if (!buriedEl) return;
+    const el = buriedEl;
+    buriedEl = null;
+    el.setAttribute('visible', true);
+    el.object3D.position.set(0, 0, 0); // remet le wrapper à l'origine
+    showToast('🐰 Le lapin est de retour !');
+  }
+
+  function trackRabbit(el, wrapY, x, z) {
+    // Le lapin est à Y local ≈ -1.06 → world Y = wrapY - 1.06
+    const y = (el.id === 'r1-wrap') ? wrapY - 1.06 : wrapY;
+    if (y < GROUND_Y) {
+      if (!buriedEl) {
+        buriedEl = el;
+        clearTimeout(domeTimer);
+        el.setAttribute('visible', false);
+        showDome(x, z);
+        showToast('🕳️ Le lapin est sous terre !');
+      } else if (domeEl) {
+        domeEl.object3D.position.x = x;
+        domeEl.object3D.position.z = z;
+      }
+    } else {
+      if (buriedEl === el) {
+        buriedEl = null;
+        el.setAttribute('visible', true);
+      }
+    }
+  }
+
+  // ── Logique commune drag ──────────────────────────────────────────
+  function startDrag(hit, clientX, clientY) {
+    drag.active    = true;
+    drag.el        = hit.el;
+    drag.group     = hit.group;
+    drag.depth     = hit.dist;
+    drag.wOrigin   = worldAtDepth(clientX, clientY, drag.depth);
+    const p        = hit.el.object3D.position;
+    drag.pOrigin   = new T3.Vector3(p.x, p.y, p.z);
+    pauseOrbit(hit.el);
+    showToast('✋ Glisse pour déplacer');
+  }
+
+  function moveDrag(clientX, clientY) {
+    if (!drag.active) return;
+    const cur    = worldAtDepth(clientX, clientY, drag.depth);
+    const delta  = cur.clone().sub(drag.wOrigin);
+    const newPos = drag.pOrigin.clone().add(delta);
+    drag.el.object3D.position.copy(newPos);
+    if (drag.group === 'rabbits') trackRabbit(drag.el, newPos.y, newPos.x, newPos.z);
+  }
+
+  function endDrag() {
+    if (!drag.active) return;
+    const finalPos  = drag.el.object3D.position.clone();
+    const wasRabbit = drag.group === 'rabbits';
+    const el        = drag.el;
+
+    drag.active = false;
+    drag.el     = null;
+    drag.group  = null;
+
+    resumeOrbit(el, finalPos);
+
+    if (wasRabbit && buriedEl === el) {
+      domeTimer = setTimeout(() => {
+        hideDome(true);
+        setTimeout(resetBuriedRabbit, 750);
+      }, DOME_DURATION);
+      showToast('⏱️ Le lapin remontera dans 30 s…');
+    }
+  }
+
+  // ── Touch events ──────────────────────────────────────────────────
+  sceneEl.addEventListener('loaded', () => {
+
+    // — Touch —
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        pinchActive = true;
+        if (drag.active) { endDrag(); }
+        return;
+      }
+      if (e.touches.length !== 1 || pinchActive) return;
+      const hit = findHitElement(e.touches[0].clientX, e.touches[0].clientY);
+      if (hit) startDrag(hit, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!drag.active || e.touches.length !== 1) {
+        if (drag.active && e.touches.length !== 1) endDrag();
+        return;
+      }
+      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) { pinchActive = false; endDrag(); }
+    }, { passive: true });
+
+    // — Mouse (PC) —
+    // Capture sur document = premier handler appelé, avant look-controls d'A-Frame
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      if (!sceneEl.hasLoaded) return;
+      const hit = findHitElement(e.clientX, e.clientY);
+      if (!hit || !hit.el) return;
+      // Bloque TOUS les autres handlers (y compris look-controls)
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      startDrag(hit, e.clientX, e.clientY);
+    }, true); // true = capture phase
+
+    document.addEventListener('mousemove', (e) => {
+      if (!drag.active) return;
+      moveDrag(e.clientX, e.clientY);
+    }, true);
+
+    document.addEventListener('mouseup', (e) => {
+      if (e.button !== 0) return;
+      endDrag();
+    }, true);
+
+  });
+})();
+
+
+// ── Pinch-to-zoom ─────────────────────────────────────────────────
+const FOV_DEFAULT = 80;
+const FOV_MIN     = 30;
+const FOV_MAX     = 130;
+let currentFOV      = FOV_DEFAULT;
+let pinchStartDist  = 0;
+let pinchStartFOV   = FOV_DEFAULT;
+let zoomTimer       = null;
+
+function getPinchDist(e) {
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function applyFOV(fov) {
+  currentFOV = Math.max(FOV_MIN, Math.min(FOV_MAX, fov));
+  const cam = document.getElementById('ar-cam');
+  if (cam) cam.setAttribute('camera', 'fov', currentFOV);
+
+  // Show zoom level indicator
+  const zoomLevel = (FOV_DEFAULT / currentFOV).toFixed(1);
+  const indicator = document.getElementById('zoom-indicator');
+  indicator.textContent = '🔍 ' + zoomLevel + '×';
+  indicator.classList.add('show');
+  clearTimeout(zoomTimer);
+  zoomTimer = setTimeout(() => indicator.classList.remove('show'), 1200);
+
+  // Show reset button if not at default
+  const resetBtn = document.getElementById('zoom-reset-btn');
+  resetBtn.classList.toggle('visible', Math.abs(currentFOV - FOV_DEFAULT) > 2);
+}
+
+function resetZoom() {
+  applyFOV(FOV_DEFAULT);
+  document.getElementById('zoom-reset-btn').classList.remove('visible');
+}
+
+document.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    pinchStartDist = getPinchDist(e);
+    pinchStartFOV  = currentFOV;
+  }
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2) return;
+  const dist  = getPinchDist(e);
+  const ratio = pinchStartDist / dist;          // pinch in → ratio>1 → zoom in → lower FOV
+  applyFOV(pinchStartFOV * ratio);
+}, { passive: true });
+
+// Double-tap to reset zoom
+let lastTap = 0;
+document.addEventListener('touchend', (e) => {
+  if (e.touches.length !== 0) return;
+  const now = Date.now();
+  if (now - lastTap < 300) resetZoom();
+  lastTap = now;
+});
+</script>
+
+</body>
+</html>
