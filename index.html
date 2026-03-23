@@ -385,24 +385,15 @@
 
   <script>
     const arUrl = new URL('ar_easter_v2.html', window.location.href).href;
-    let qrDataURL = null;
 
-    // Générer le QR en arrière-plan au chargement pour avoir la dataURL prête
-    const _tmpDiv = document.createElement('div');
-    _tmpDiv.style.cssText = 'position:fixed;left:-9999px;visibility:hidden';
-    document.body.appendChild(_tmpDiv);
+    // Générer le QR d'impression dès le chargement (dans le DOM, page cachée)
     try {
-      new QRCode(_tmpDiv, {
+      new QRCode(document.getElementById('qr-print'), {
         text: arUrl, width: 220, height: 220,
         colorDark: '#6d28d9', colorLight: '#fce4ec',
         correctLevel: QRCode.CorrectLevel.M
       });
     } catch(e) {}
-    setTimeout(() => {
-      const img = _tmpDiv.querySelector('img');
-      if (img) qrDataURL = img.src;
-      document.body.removeChild(_tmpDiv);
-    }, 300);
 
     // Sur desktop : afficher le QR dans la section principale
     const isDesktop = window.innerWidth >= 768 && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -420,17 +411,7 @@
     }
 
     function openPrintQR() {
-      const page = document.getElementById('print-qr-page');
-      page.style.display = 'flex';
-      const container = document.getElementById('qr-print');
-      if (!container.hasChildNodes() && qrDataURL) {
-        const img = document.createElement('img');
-        img.src = qrDataURL;
-        img.width = 220;
-        img.height = 220;
-        img.style.borderRadius = '10px';
-        container.appendChild(img);
-      }
+      document.getElementById('print-qr-page').style.display = 'flex';
     }
     function closePrintQR() {
       document.getElementById('print-qr-page').style.display = 'none';
