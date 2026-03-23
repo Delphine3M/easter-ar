@@ -408,14 +408,16 @@
       page.style.display = 'flex';
       const container = document.getElementById('qr-print');
       if (!container.hasChildNodes()) {
-        new QRCode(container, {
-          text: arUrl,
-          width: 220,
-          height: 220,
-          colorDark: '#6d28d9',
-          colorLight: '#fce4ec',
-          correctLevel: QRCode.CorrectLevel.M
-        });
+        // Cloner l'img déjà générée sur la page principale
+        const srcImg = document.querySelector('#qr-code img');
+        if (srcImg) {
+          const img = document.createElement('img');
+          img.src = srcImg.src;
+          img.width = 220;
+          img.height = 220;
+          img.style.borderRadius = '10px';
+          container.appendChild(img);
+        }
       }
     }
     function closePrintQR() {
