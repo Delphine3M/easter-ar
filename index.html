@@ -242,7 +242,8 @@
       text-align: center;
       font-weight: 600;
     }
-    #qr-code canvas, #qr-code img { border-radius: 10px; }
+    #qr-code img, #qr-print img { border-radius: 10px; }
+    #qr-code canvas, #qr-print canvas { display: none; }
 
     /* ── Page d'impression QR ─────────────────────────────────── */
     #print-qr-page {
@@ -415,18 +416,6 @@
           colorLight: '#fce4ec',
           correctLevel: QRCode.CorrectLevel.M
         });
-        // Convertir le canvas en <img> pour que l'impression/PDF fonctionne
-        setTimeout(() => {
-          const canvas = container.querySelector('canvas');
-          if (canvas) {
-            const img = document.createElement('img');
-            img.src = canvas.toDataURL('image/png');
-            img.width = 220;
-            img.height = 220;
-            img.style.borderRadius = '10px';
-            canvas.replaceWith(img);
-          }
-        }, 150);
       }
     }
     function closePrintQR() {
